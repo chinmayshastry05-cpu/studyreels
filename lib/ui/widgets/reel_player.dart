@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../data/models/reel.dart';
 import '../../data/models/transcript.dart';
+import '../../data/services/reel_exporter.dart';
 
 /// Plays the ORIGINAL video file, looping the reel's [start, end] range —
 /// reels are never re-rendered clips. Shows transcript captions as an
@@ -59,6 +60,62 @@ class _ReelPlayerState extends State<ReelPlayer> {
 
   String? _lastCaption;
   bool _lastPlaying = true;
+  bool _exporting = false;
+
+  Future<void> _save() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.bolt),
+              title: const Text('Save clip (fast)'),
+              subtitle: const Text(
+                  'Stream-copy trim, no re-encode — to Movies/StudyReels'),
+              onTap: () => Navigator.of(context).pop('fast'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.subtitles),
+              title: const Text('Save clip with burned-in captions'),
+              subtitle: const Text('Needs re-encode — not in this build yet'),
+              onTap: () => Navigator.of(context).pop('captions'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'captions') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Caption burn-in needs video re-encode — coming in a later build.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _exporting = true);
+    try {
+      await ReelExporter.exportClip(
+        videoPath: widget.reel.videoPath,
+        startSec: _startSec,
+        endSec: _endSec,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved to Movies/StudyReels')),
+      );
+    } on ReelExportException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Save failed: ${e.message}')),
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   void _onTick() {
     if (!_ready || !mounted) return;
@@ -121,6 +178,26 @@ class _ReelPlayerState extends State<ReelPlayer> {
               child: Icon(Icons.play_arrow,
                   size: 72, color: Colors.white70),
             ),
+          // One-tap save to gallery.
+          Positioned(
+            top: 48,
+            right: 12,
+            child: _exporting
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.download,
+                        color: Colors.white),
+                    tooltip: 'Save reel to gallery',
+                    onPressed: _save,
+                  ),
+          ),
           // Caption overlay.
           if (caption != null && caption.isNotEmpty)
             Positioned(

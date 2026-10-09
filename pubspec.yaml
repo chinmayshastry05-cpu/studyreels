@@ -12,7 +12,7 @@ dependencies:
   ffi: ^2.1.0 # Cactus Dart FFI binding (bindings/flutter/cactus.dart)
   path_provider: ^2.1.0 # app files dir for the on-device model bundle
   video_player: ^2.9.1 # real playback of the ORIGINAL file at reel timestamps
-  file_picker: ^8.1.0 # pick a local lecture video
+  image_picker: ^1.1.2 # gallery video pick via the system picker (no broad storage permission)
   provider: ^6.1.2 # LibraryStore state for feed + library screens
 
 dev_dependencies:

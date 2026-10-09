@@ -23,11 +23,42 @@ import io.flutter.plugin.common.MethodChannel;
  */
 public class MainActivity extends FlutterActivity {
     private static final String AUDIO_CHANNEL = "com.studyreels.app/audio";
+    private static final String EXPORT_CHANNEL = "com.studyreels.app/export";
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
+        new MethodChannel(
+                flutterEngine.getDartExecutor().getBinaryMessenger(),
+                EXPORT_CHANNEL).setMethodCallHandler((call, result) -> {
+            if (call.method.equals("exportClip")) {
+                String videoPath = call.argument("videoPath");
+                // Dart numbers may decode as Double or Long — normalize.
+                Number startNum = call.argument("startSec");
+                Number endNum = call.argument("endSec");
+                if (videoPath == null || startNum == null || endNum == null) {
+                    result.error("BAD_ARGS",
+                            "videoPath, startSec, endSec are required", null);
+                    return;
+                }
+                final double startSec = startNum.doubleValue();
+                final double endSec = endNum.doubleValue();
+                bg.execute(() -> {
+                    try {
+                        String uri = VideoExporter.exportClip(
+                                this, videoPath, startSec, endSec);
+                        runOnUiThread(() -> result.success(uri));
+                    } catch (Exception e) {
+                        runOnUiThread(() -> result.error(
+                                "EXPORT_FAILED", String.valueOf(e.getMessage()),
+                                null));
+                    }
+                });
+            } else {
+                result.notImplemented();
+            }
+        });
         new MethodChannel(
                 flutterEngine.getDartExecutor().getBinaryMessenger(),
                 AUDIO_CHANNEL).setMethodCallHandler((call, result) -> {

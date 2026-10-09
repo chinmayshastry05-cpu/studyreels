@@ -172,6 +172,16 @@ it needs a real phone run.
   ORIGINAL video file with `video_player`, looping its `[start, end]` range —
   never a re-rendered clip. Transcript captions overlay the video; tap toggles
   play/pause; only the visible page plays.
+- **Save to gallery**: the download button on a reel exports a real clip file
+  via `VideoExporter` (Android `MediaExtractor` + `MediaMuxer`, **stream-copy
+  trim — no re-encode, fast, keyframe-aligned**: the clip starts at the
+  keyframe at/before the reel start). Saved through `MediaStore` to
+  `Movies/StudyReels`, scoped-storage compliant, no storage or INTERNET
+  permission. Burned-in captions would need a full re-encode pass, so they
+  are a separate optional export, not the default (not built yet).
+- **Import tab**: pick videos from the device gallery with the system picker
+  (`image_picker` — no broad storage permission). YouTube import via yt-dlp
+  stays out of scope for videos already on the phone.
 - **Library tab**: reels persisted as local JSON (`library.json` in the app
   documents dir), grouped by chapter, split into topics/problems. Tapping a
   reel opens it in the full-screen player.
