@@ -248,14 +248,33 @@ Goal: turn Qwen3 0.6B into a **specialist** that does one job extremely well
 3. **Save permanently.** Store the trained model in two places: his 05
    Google Drive, and as a GitHub release **or** a Hugging Face repo under
    his account.
-4. **Merge into the app.** `cactus convert Qwen/Qwen3-0.6B --bits 4 --lora <path>`
-   merges the Unsloth LoRA into a Cactus bundle; drop it into the app's
-   model dir.
+4. **Merge into the app — BLOCKED, validate first.** ⚠️ The pinned Cactus
+   revision's own docs (`docs/finetuning.md`) warn: `cactus convert --lora`
+   currently produces **CQ weights only — local runtime bundle generation
+   is unavailable while the graph builder is being rewritten**. A merged
+   LoRA does NOT currently yield a bundle the phone can load. Before
+   committing to this path:
+   - Re-check `docs/finetuning.md` on the newest Cactus revision — the
+     rewrite may have landed.
+   - After training, run `cactus convert` and verify the output actually
+     loads via `cactus_init` (on Linux first, then on-device). If it only
+     emits CQ weights, STOP — do not ship it.
+   - Fallbacks if still blocked: (a) wait for the graph-builder rewrite;
+     (b) keep the base Qwen3-0.6B and invest in the prompt (the eval harness
+     in `assets/eval/` will show whether that's enough); (c) adapter
+     approaches that don't need conversion.
+   - What was actually tested here: **nothing** — no GPU in this
+     environment, no `convert` run. The warning above is from reading the
+     docs, not from an experiment.
 5. **Stay tiny.** When choosing the fine-tune base, also evaluate
    **SmolLM2 135M and 360M** — if either handles the boundary-JSON job,
    prefer the smaller one. After fine-tuning, try quantizing further
    (e.g. int4 → int2/int3); keep the smaller quant only if segmentation
    quality holds on a held-out lecture set.
+6. **Score the base first.** Before any fine-tune, label boundaries with
+   `assets/eval/boundary_template.json` (≥5 lectures) and score the base
+   model with `SegmentEval.score`. The fine-tune must beat those numbers
+   to be worth it.
 
 ## Model provenance
 
