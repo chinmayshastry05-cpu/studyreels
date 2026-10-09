@@ -42,4 +42,26 @@ void main() {
           throwsA(isA<LlmException>()));
     });
   });
+
+  group('Cactus return-code contract', () {
+    // Verified against the pinned third_party/cactus source
+    // (cactus_complete in cactus-engine/src/complete.cpp): success returns
+    // the number of bytes written (positive), errors return -1.
+    // generate() itself needs the native library, so the check is tested
+    // through the pure checkOk seam it uses.
+    test('a positive byte count is success, not an error', () {
+      expect(() => CactusLlmBackend.checkOk(128, 'cactus_complete'),
+          returnsNormally);
+    });
+
+    test('zero is not treated as an error', () {
+      expect(() => CactusLlmBackend.checkOk(0, 'cactus_complete'),
+          returnsNormally);
+    });
+
+    test('a negative code throws', () {
+      expect(() => CactusLlmBackend.checkOk(-1, 'cactus_complete'),
+          throwsA(isA<LlmException>()));
+    });
+  });
 }

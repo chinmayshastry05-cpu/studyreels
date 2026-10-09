@@ -44,6 +44,16 @@ class CactusLlmBackend implements LlmBackend {
   cactus.CactusModelT _model = nullptr;
   bool _ready = false;
 
+  /// Validates a Cactus return code. Per the engine source (cactus_complete
+  /// in the pinned third_party/cactus submodule), completion calls return
+  /// the NUMBER OF BYTES WRITTEN on success (positive) and a negative value
+  /// on error — so only rc < 0 is a failure. Pure function — unit-tested.
+  static void checkOk(int rc, String what) {
+    if (rc < 0) {
+      throw LlmException('$what failed with code $rc');
+    }
+  }
+
   /// Builds the completion options. Pure function — unit-tested to always
   /// carry "auto_handoff": false.
   static Map<String, Object?> buildCompletionOptions(
@@ -118,9 +128,7 @@ class CactusLlmBackend implements LlmBackend {
         nullptr, // pcmBuffer
         0, // pcmBufferSize
       );
-      if (rc != 0) {
-        throw LlmException('cactus_complete returned error code $rc');
-      }
+      checkOk(rc, 'cactus_complete');
       final responseJson = buf.cast<Utf8>().toDartString();
       return extractAssistantText(responseJson);
     } finally {
