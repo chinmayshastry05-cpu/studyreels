@@ -115,8 +115,11 @@ cactus build --android
 ./scripts/download_model.sh
 # → prebuilt Cactus-Compute/Qwen3-0.6B int4 bundle (~400 MB)
 
-# 4. Push the bundle to the phone
-adb push <bundle-dir> /sdcard/StudyReels/models/qwen3-0.6b-int4/
+# 4. Push the bundle into the app's private files (debug build on device)
+./scripts/push_model.sh <bundle-dir>
+# → /data/data/com.studyreels.app/files/models/qwen3-0.6b-int4/
+# If the bundle is missing, the app shows a "model missing" screen with the
+# exact expected path instead of crashing.
 
 # 5. Dart side
 flutter pub get

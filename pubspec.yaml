@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   ffi: ^2.1.0 # Cactus Dart FFI binding (bindings/flutter/cactus.dart)
+  path_provider: ^2.1.0 # app files dir for the on-device model bundle
 
 dev_dependencies:
   flutter_test:
