@@ -176,14 +176,18 @@ jobs:
           # /sdcard fails with EPERM on API 34, run 37900585709); the app
           # can read it back for MediaExtractor/video_player.
           #
-          # Run 29 hung AFTER install with no test output (killed by the
-          # step timeout), so: (1) snapshot logcat in the background every
-          # 60s — a killed step never reaches a failure handler, but files
-          # already on disk survive; (2) --reporter expanded -v shows
-          # exactly where the runner stalls.
+          # Run 30: install OK, then "Waiting for VM Service port to be
+          # available..." until the step timeout - the app never printed
+          # "VM Service is listening". The background loop prints a
+          # filtered logcat tail + pidof to the JOB LOG every 60s (a killed
+          # step never reaches a failure handler, but these lines are
+          # already in the log): crash (AndroidRuntime) vs hang (pid alive,
+          # no VM service) is visible immediately. `logcat -d` dumps
+          # without clearing, so flutter's own streaming log reader is
+          # unaffected.
           script: |
             adb push integration_test/fixtures/test_video.mp4 /data/local/tmp/test_video.mp4
-            (while [ ! -f "$GITHUB_WORKSPACE/STOP_LOGCAT" ]; do sleep 60; adb logcat -d > "$GITHUB_WORKSPACE/logcat-snap-$(date +%s).txt" 2>/dev/null || break; done) &
+            (while [ ! -f "$GITHUB_WORKSPACE/STOP_LOGCAT" ]; do echo "=== logcat @ $(date -u +%H:%M:%S) UTC ==="; adb logcat -d -s 'flutter:V' 'AndroidRuntime:E' 'DEBUG:V' '*:F' 2>/dev/null | tail -150; echo "=== pidof com.studyreels.app: $(adb shell pidof com.studyreels.app 2>/dev/null || echo none) ==="; adb logcat -d > "$GITHUB_WORKSPACE/logcat-snap-$(date +%s).txt" 2>/dev/null || break; sleep 60; done) &
             flutter test integration_test --reporter expanded -v --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4; EC=$?; touch "$GITHUB_WORKSPACE/STOP_LOGCAT"; adb logcat -d > "$GITHUB_WORKSPACE/logcat-final.txt" 2>/dev/null; exit $EC
 
       - name: Upload logcat snapshots
