@@ -165,8 +165,9 @@ jobs:
           # NOTE: one command per line, NO backslash continuations — the
           # action runs each line as a separate `sh -c`, so a trailing `\`
           # becomes a literal argument and breaks `flutter test`.
-          # Push into Download/: pushing to the /sdcard root fails with
-          # EPERM on API 34 (run 37900585709).
+          # /data/local/tmp is the adb-writable scratch dir (pushing to
+          # /sdcard fails with EPERM on API 34, run 37900585709); the app
+          # can read it back for MediaExtractor/video_player.
           script: |
-            adb push integration_test/fixtures/test_video.mp4 /sdcard/Download/test_video.mp4
-            flutter test integration_test --dart-define=TEST_VIDEO_PATH=/sdcard/Download/test_video.mp4
+            adb push integration_test/fixtures/test_video.mp4 /data/local/tmp/test_video.mp4
+            flutter test integration_test --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4
