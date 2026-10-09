@@ -175,14 +175,21 @@ jobs:
           # /data/local/tmp is the adb-writable scratch dir (pushing to
           # /sdcard fails with EPERM on API 34, run 37900585709); the app
           # can read it back for MediaExtractor/video_player.
+          #
+          # Run 29 hung AFTER install with no test output (killed by the
+          # step timeout), so: (1) snapshot logcat in the background every
+          # 60s — a killed step never reaches a failure handler, but files
+          # already on disk survive; (2) --reporter expanded -v shows
+          # exactly where the runner stalls.
           script: |
             adb push integration_test/fixtures/test_video.mp4 /data/local/tmp/test_video.mp4
-            flutter test integration_test --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4 || { echo "--- dumping logcat ---"; adb logcat -d > "$GITHUB_WORKSPACE/logcat.txt"; exit 1; }
+            (while [ ! -f "$GITHUB_WORKSPACE/STOP_LOGCAT" ]; do sleep 60; adb logcat -d > "$GITHUB_WORKSPACE/logcat-snap-$(date +%s).txt" 2>/dev/null || break; done) &
+            flutter test integration_test --reporter expanded -v --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4; EC=$?; touch "$GITHUB_WORKSPACE/STOP_LOGCAT"; adb logcat -d > "$GITHUB_WORKSPACE/logcat-final.txt" 2>/dev/null; exit $EC
 
-      - name: Upload logcat on failure
-        if: failure()
+      - name: Upload logcat snapshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: emulator-logcat
-          path: logcat.txt
+          path: logcat*.txt
           if-no-files-found: ignore
