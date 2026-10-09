@@ -96,7 +96,9 @@ jobs:
   # drivable from flutter_test).
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Fail fast: the whole job (emulator boot + test APK build + 3 tests)
+    # fits comfortably in 25 min when healthy; longer means something hung.
+    timeout-minutes: 25
     # The emulator gate is informational: it must never block the build or
     # the release. Real-device proof comes from the F55.
     continue-on-error: true
