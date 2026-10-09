@@ -115,6 +115,33 @@ cactus build --android
 ./scripts/download_model.sh
 # → prebuilt Cactus-Compute/Qwen3-0.6B int4 bundle (~400 MB)
 
+## Transcription (phase 2C)
+
+Lecture audio → timestamped transcript, 100% on-device:
+
+1. **Audio extraction** — `AudioExtractor` (Android `MediaExtractor` +
+   `MediaCodec`, platform channel `com.studyreels.app/audio`) decodes the
+   video's audio track to a 16 kHz mono 16-bit WAV in one streaming pass
+   (constant memory, no network).
+2. **ASR model** — whisper-base (`Cactus-Compute/whisper-base`), the smallest
+   Cactus transcription model with usable Hindi + English. whisper-tiny's
+   Hindi is poor; moonshine/parakeet are English-only and parakeet returns
+   no timestamps. Language is auto-detected per lecture.
+3. **Transcribe** — `TranscriptionService` calls `cactus_transcribe` with
+   `{"timestamps":true}` and parses `{start, end, text}` segments.
+   `cloud_handoff` is asserted false (fail closed).
+4. **Chunk** — `TranscriptChunker` groups segments into 1,200–2,000-token
+   windows using the segmentation model's own tokenizer
+   (`cactus_tokenize`), ready for the topic-boundary LLM.
+
+```bash
+./scripts/download_transcriber.sh          # fetch whisper-base (dev machine)
+./scripts/push_model.sh <bundle-dir> whisper-base   # push to the phone
+```
+
+Status: services + chunker + tests are in; on-device transcription speed /
+accuracy not yet measured (needs a real phone run).
+
 # 4. Push the bundle into the app's private files (debug build on device)
 ./scripts/push_model.sh <bundle-dir>
 # → /data/data/com.studyreels.app/files/models/qwen3-0.6b-int4/

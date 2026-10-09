@@ -12,18 +12,20 @@
 # (planned).
 #
 # Usage:
-#   ./scripts/push_model.sh <bundle-dir>
+#   ./scripts/push_model.sh <bundle-dir> [dest-dir-name]
 # Example:
-#   ./scripts/push_model.sh ~/.cactus/models/Cactus-Compute_Qwen3-0.6B
+#   ./scripts/push_model.sh ~/.cactus/models/Cactus-Compute_Qwen3-0.6B qwen3-0.6b-int4
+#   ./scripts/push_model.sh ~/.cactus/models/Cactus-Compute_whisper-base whisper-base
 #
 set -euo pipefail
 
 PKG="com.studyreels.app"
-MODEL_DIR="qwen3-0.6b-int4"
 BUNDLE_DIR="${1:-}"
+# Default destination: the bundle dir's own name.
+MODEL_DIR="${2:-$(basename "${BUNDLE_DIR:-model}")}"
 
 if [[ -z "$BUNDLE_DIR" ]]; then
-  echo "usage: $0 <bundle-dir>" >&2
+  echo "usage: $0 <bundle-dir> [dest-dir-name]" >&2
   exit 1
 fi
 if [[ ! -d "$BUNDLE_DIR" ]]; then

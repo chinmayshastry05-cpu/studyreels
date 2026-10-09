@@ -130,6 +130,35 @@ class CactusLlmBackend implements LlmBackend {
     }
   }
 
+  /// Token count for [text] using the loaded model's own tokenizer.
+  /// Used to size transcript chunks (1.2K–2K tokens) accurately.
+  /// Returns the required token count without copying tokens: a NULL buffer
+  /// query per the cactus_tokenize docs (rc 0 = ok, -2 = buffer too small,
+  /// both set out_len).
+  int countTokens(String text) {
+    if (!_ready || _model == nullptr) {
+      throw const LlmNotLoadedException();
+    }
+    final textPtr = text.toNativeUtf8();
+    final outLen = calloc<IntPtr>();
+    try {
+      final rc = cactus.cactusTokenize(
+        _model,
+        textPtr.cast(),
+        nullptr.cast<Uint32>(),
+        0,
+        outLen,
+      );
+      if (rc != 0 && rc != -2) {
+        throw LlmException('cactus_tokenize failed with code $rc');
+      }
+      return outLen.value;
+    } finally {
+      calloc.free(textPtr);
+      calloc.free(outLen);
+    }
+  }
+
   @override
   Future<void> dispose() async {
     if (_model != nullptr) {
