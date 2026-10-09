@@ -19,6 +19,9 @@ android/local.properties
 *.safetensors
 models/
 
+# Built native engine (built in CI via third_party/cactus/android/build.sh)
+android/app/src/main/jniLibs/arm64-v8a/*.so
+
 # llama.cpp build artifacts
 android/app/src/main/cpp/build/
 
