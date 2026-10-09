@@ -25,6 +25,12 @@ import 'package:studyreels/main.dart' as app;
 /// model bundle is installed on the emulator), real Snapdragon 7 Gen 1
 /// performance, or the OS gallery-picker UI (a separate activity, not
 /// drivable from flutter_test).
+///
+/// CI note: `flutter test` drives tests through the Dart VM service, which
+/// binds a localhost socket - Android requires the INTERNET permission for
+/// that, even on localhost. The product ships WITHOUT it (locked), so the
+/// CI job generates a throwaway src/debug/AndroidManifest.xml granting it.
+/// That file is never committed and never in releases.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 

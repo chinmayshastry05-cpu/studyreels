@@ -149,6 +149,29 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # CI ONLY: `flutter test integration_test` drives tests through the
+      # Dart VM service, which binds a localhost socket - and Android
+      # requires the INTERNET permission for any socket bind, even
+      # localhost. Run 31 proved it: "Could not start Dart VM service HTTP
+      # server: SocketException: Failed to create server socket (OS Error:
+      # Operation not permitted)". The product ships WITHOUT the INTERNET
+      # permission (locked decision); this file is generated here, never
+      # committed, and the build job (which makes the release APK) never
+      # creates it.
+      - name: Allow INTERNET for the test harness only
+        run: |
+          mkdir -p android/app/src/debug
+          cat > android/app/src/debug/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <!-- CI ONLY: lets the Dart VM service bind localhost for
+                   `flutter test integration_test`. Never committed, never
+                   in releases. -->
+              <uses-permission android:name="android.permission.INTERNET"/>
+          </manifest>
+          EOF
+          cat android/app/src/debug/AndroidManifest.xml
+
       - name: Run integration tests on emulator
         # Fail fast at the step level too: boot (~1 min) + APK build
         # (~5 min) + 3 tests (~1 min) when healthy.
