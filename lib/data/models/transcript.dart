@@ -25,6 +25,22 @@ class TranscriptSegment {
       text: (json['text'] as String).trim(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'start': start,
+        'end': end,
+        'text': text,
+      };
+}
+
+/// Returns the caption whose time range contains [positionSec], or null.
+/// Pure function — unit-tested.
+TranscriptSegment? captionAt(
+    List<TranscriptSegment> captions, double positionSec) {
+  for (final c in captions) {
+    if (positionSec >= c.start && positionSec < c.end) return c;
+  }
+  return null;
 }
 
 class TranscriptChunk {

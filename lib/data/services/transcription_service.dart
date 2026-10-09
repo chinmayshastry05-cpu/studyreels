@@ -3,10 +3,59 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../cactus/cactus.dart' as cactus;
 import '../models/transcript.dart';
 import 'audio_extractor.dart';
+import 'transcriber.dart';
+
+/// Transcribes in a background isolate so the UI thread never blocks —
+/// a lecture can take minutes. Audio extraction stays on the main isolate
+/// (platform channel); only plain strings cross the isolate boundary.
+Future<List<TranscriptSegment>> transcribeVideoInBackground({
+  required String videoPath,
+  required String whisperModelDir,
+  required void Function(String stage) onProgress,
+}) async {
+  onProgress('Extracting audio…');
+  final wavPath = await AudioExtractor.extractWav(videoPath);
+  try {
+    onProgress('Transcribing audio on-device…');
+    return await compute(
+      _transcribeWav,
+      {'whisperDir': whisperModelDir, 'wavPath': wavPath},
+    );
+  } finally {
+    await File(wavPath).delete().catchError((_) => File(wavPath));
+  }
+}
+
+Future<List<TranscriptSegment>> _transcribeWav(
+    Map<String, String> args) {
+  final service = TranscriptionService(args['whisperDir']!);
+  return service.transcribeWav(args['wavPath']!);
+}
+
+/// Production [Transcriber]: background-isolate transcription.
+class BackgroundTranscriber implements Transcriber {
+  final String whisperModelDir;
+  final void Function(String stage) onProgress;
+
+  BackgroundTranscriber({
+    required this.whisperModelDir,
+    required this.onProgress,
+  });
+
+  @override
+  Future<List<TranscriptSegment>> transcribeVideo(String videoPath) {
+    return transcribeVideoInBackground(
+      videoPath: videoPath,
+      whisperModelDir: whisperModelDir,
+      onProgress: onProgress,
+    );
+  }
+}
 
 /// On-device speech-to-text via the Cactus built-in transcription models.
 ///
@@ -26,7 +75,7 @@ class TranscriptionException implements Exception {
   String toString() => 'TranscriptionException: $message';
 }
 
-class TranscriptionService {
+class TranscriptionService implements Transcriber {
   /// On-device whisper bundle dir, e.g.
   /// /data/data/com.studyreels.app/files/models/whisper-base
   final String whisperModelDir;

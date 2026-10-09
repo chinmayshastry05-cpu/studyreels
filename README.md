@@ -142,6 +142,23 @@ Lecture audio → timestamped transcript, 100% on-device:
 Status: services + chunker + tests are in; on-device transcription speed /
 accuracy not yet measured (needs a real phone run).
 
+## Feed, playback & library (phase 2D)
+
+- **Import tab**: pick a local video (`file_picker`), name the chapter, and run
+  the full on-device pipeline — audio extraction, whisper transcription in a
+  background isolate (the UI thread never blocks), 1.2K–2K token chunking,
+  tiny-LLM topic/problem segmentation, reels saved to the library.
+- **Reels tab**: TikTok-style vertical swipe feed. Each reel plays the
+  ORIGINAL video file with `video_player`, looping its `[start, end]` range —
+  never a re-rendered clip. Transcript captions overlay the video; tap toggles
+  play/pause; only the visible page plays.
+- **Library tab**: reels persisted as local JSON (`library.json` in the app
+  documents dir), grouped by chapter, split into topics/problems. Tapping a
+  reel opens it in the full-screen player.
+
+Status: UI + pipeline + persistence are in; playback and the end-to-end
+import flow are not yet run on a real device.
+
 # 4. Push the bundle into the app's private files (debug build on device)
 ./scripts/push_model.sh <bundle-dir>
 # → /data/data/com.studyreels.app/files/models/qwen3-0.6b-int4/

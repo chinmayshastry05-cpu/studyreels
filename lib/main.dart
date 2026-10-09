@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 
+import 'data/services/library_store.dart';
 import 'data/services/model_store.dart';
 import 'ui/screens/feed_screen.dart';
 import 'ui/screens/import_screen.dart';
@@ -24,8 +26,8 @@ class StudyReelsApp extends StatelessWidget {
   }
 }
 
-/// Checks for the on-device LLM bundle before entering the app.
-/// Shows a clear "model missing" screen with the exact expected path.
+/// Checks for the on-device LLM bundle before entering the app, then loads
+/// the persisted library and provides it to the feed/library/import screens.
 class StartupGate extends StatefulWidget {
   const StartupGate({super.key});
 
@@ -34,54 +36,69 @@ class StartupGate extends StatefulWidget {
 }
 
 class _StartupGateState extends State<StartupGate> {
-  late Future<_ModelCheck> _check;
+  late Future<_Startup> _startup;
 
   @override
   void initState() {
     super.initState();
-    _check = _runCheck();
+    _startup = _runStartup();
   }
 
-  Future<_ModelCheck> _runCheck() async {
+  Future<_Startup> _runStartup() async {
     final docs = await getApplicationDocumentsDirectory();
     final expected = ModelStore.expectedModelPath(docs.path);
     final present = await ModelStore.isModelPresent(docs.path);
-    return _ModelCheck(present: present, expectedPath: expected);
+    final library = LibraryStore();
+    if (present) {
+      await library.load();
+    }
+    return _Startup(
+        modelPresent: present,
+        expectedPath: expected,
+        library: library);
   }
 
-  void _recheck() {
+  void _retry() {
     setState(() {
-      _check = _runCheck();
+      _startup = _runStartup();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_ModelCheck>(
-      future: _check,
+    return FutureBuilder<_Startup>(
+      future: _startup,
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final check = snap.data!;
-        if (!check.present) {
+        final startup = snap.data!;
+        if (!startup.modelPresent) {
           return ModelMissingScreen(
-            expectedPath: check.expectedPath,
-            onRecheck: _recheck,
+            expectedPath: startup.expectedPath,
+            onRecheck: _retry,
           );
         }
-        return const HomeShell();
+        return ChangeNotifierProvider.value(
+          value: startup.library,
+          child: const HomeShell(),
+        );
       },
     );
   }
 }
 
-class _ModelCheck {
-  final bool present;
+class _Startup {
+  final bool modelPresent;
   final String expectedPath;
-  const _ModelCheck({required this.present, required this.expectedPath});
+  final LibraryStore library;
+  const _Startup({
+    required this.modelPresent,
+    required this.expectedPath,
+    required this.library,
+  });
 }
 
 class HomeShell extends StatefulWidget {
@@ -94,16 +111,15 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _screens = <Widget>[
-    FeedScreen(),
-    LibraryScreen(),
-    ImportScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final screens = <Widget>[
+      const FeedScreen(),
+      const LibraryScreen(),
+      ImportScreen(onDone: () => setState(() => _index = 0)),
+    ];
     return Scaffold(
-      body: _screens[_index],
+      body: screens[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
