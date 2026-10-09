@@ -144,6 +144,11 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # The action auto-disables KVM on some Linux runners, which makes
+          # boot impossibly slow (boot timeout). Force hardware acceleration;
+          # if /dev/kvm is truly absent the emulator fails fast with a clear
+          # error instead of a 10-minute timeout.
+          disable-linux-hw-accel: false
           script: |
             adb push integration_test/fixtures/test_video.mp4 /sdcard/test_video.mp4
             flutter test integration_test \
