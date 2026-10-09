@@ -1,0 +1,22 @@
+name: studyreels
+description: Fully local study app — lecture videos split into topic/problem reels by a tiny on-device LLM.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.0 # Cactus Dart FFI binding (bindings/flutter/cactus.dart)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/prompts/
+    - assets/samples/

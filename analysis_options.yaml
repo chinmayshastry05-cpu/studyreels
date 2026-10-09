@@ -1,0 +1,12 @@
+# Minimal lints, no extra packages required.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+linter:
+  rules:
+    - avoid_print
+    - prefer_const_constructors
+    - prefer_final_fields
+    - unnecessary_null_checks
+    - use_key_in_widget_constructors

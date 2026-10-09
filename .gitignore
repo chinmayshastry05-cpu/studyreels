@@ -1,0 +1,32 @@
+# Dart / Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.log
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+
+# Model weights — NEVER commit these. Fetch via scripts/download_model.sh
+*.gguf
+*.bin
+*.safetensors
+models/
+
+# llama.cpp build artifacts
+android/app/src/main/cpp/build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db

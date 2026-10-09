@@ -1,0 +1,15 @@
+# Sample timestamped transcript chunk (0s - 480s).
+# Format: [mm:ss] text  — this is what the segmenter consumes.
+[00:00] Welcome back. Today we continue with rotational mechanics.
+[00:18] First, a quick recap of torque: torque equals r cross F.
+[00:47] Now the new idea: moment of inertia, the rotational analogue of mass.
+[01:25] For a point mass at distance r, I equals m r squared.
+[02:10] For extended bodies we integrate: I equals integral r squared dm.
+[03:02] Let's do a worked example. Find the moment of inertia of a thin rod about its center.
+[03:40] Set up the integral from minus L over 2 to L over 2.
+[04:35] Evaluating gives M L squared over 12. Write that down.
+[05:12] Next topic: parallel axis theorem.
+[05:50] I about any axis equals I about center of mass plus M d squared.
+[06:30] Quick problem: a disc of mass 2 kg, radius 0.3 m, axis shifted 0.1 m. Find I.
+[07:10] I center is half M R squared, that's 0.09. Add M d squared, 0.02. Total 0.11 kg m squared.
+[07:45] That's all for today. Next class: angular momentum.
