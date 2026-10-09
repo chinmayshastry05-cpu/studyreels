@@ -90,31 +90,38 @@ void main() {
     });
 
     test('chunks stay within token bounds and cover everything', () {
-      // 10 segments x 400 tokens = 4000 tokens, window 1200..2000.
-      // Optimal packing: [2000, 2000] — every chunk within bounds.
+      // 10 segments x 400 tokens = 4000 tokens, window 1200..2000,
+      // overlap 200 -> [2000, 2000, 800]: the overlap region is
+      // re-covered by the next chunk.
       final segments = List.generate(
           10, (i) => _seg(i * 10.0, i * 10.0 + 9.0, 400));
       final chunks = TranscriptChunker.chunk(segments, _words);
-      expect(chunks, hasLength(2));
-      for (final c in chunks) {
-        expect(c.tokens, inInclusiveRange(1200, 2000));
-      }
+      expect(chunks.map((c) => c.tokens), [2000, 2000, 800]);
       // Boundaries: chunk spans its segments exactly.
       expect(chunks[0].start, 0.0);
       expect(chunks[0].end, 49.0);
-      expect(chunks[1].start, 50.0);
-      expect(chunks[1].end, 99.0);
-      // Total token coverage is complete.
-      expect(
-          chunks.fold<int>(0, (sum, c) => sum + c.tokens), 4000);
+      // Overlap: each chunk starts inside the previous one.
+      expect(chunks[1].start, lessThan(chunks[0].end));
+      expect(chunks[2].start, lessThan(chunks[1].end));
+      // Last chunk still reaches the end of the transcript.
+      expect(chunks.last.end, 99.0);
     });
 
     test('tail chunk may be smaller than minTokens', () {
-      // 6 segments x 400 tokens = 2400 -> [2000, 400(tail)].
+      // 6 segments x 400 tokens = 2400, overlap 200 -> [2000, 800(tail)].
       final segments =
           List.generate(6, (i) => _seg(i * 10.0, i * 10.0 + 9.0, 400));
       final chunks = TranscriptChunker.chunk(segments, _words);
+      expect(chunks.map((c) => c.tokens), [2000, 800]);
+    });
+
+    test('overlapTokens=0 gives non-overlapping chunks', () {
+      final segments =
+          List.generate(6, (i) => _seg(i * 10.0, i * 10.0 + 9.0, 400));
+      final chunks =
+          TranscriptChunker.chunk(segments, _words, overlapTokens: 0);
       expect(chunks.map((c) => c.tokens), [2000, 400]);
+      expect(chunks[1].start, chunks[0].end + 1.0);
     });
 
     test('a single oversized segment becomes its own chunk', () {
@@ -134,6 +141,7 @@ void main() {
         _words,
         minTokens: 1,
         maxTokens: 100,
+        overlapTokens: 0,
       );
       expect(chunks, hasLength(1));
       expect(chunks[0].text, 'ek do');

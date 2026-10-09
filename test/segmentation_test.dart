@@ -49,6 +49,19 @@ void main() {
           throwsA(isA<SegmentationException>()));
     });
 
+    test('allows gaps: no filler segments required', () {
+      // The prompt no longer forces gap-free tiling; intros/tangents may
+      // be left unsegmented.
+      const json = '{"segments":['
+          '{"type":"topic","title":"A","start":30,"end":120},'
+          '{"type":"problem","title":"B","start":300,"end":420}]}';
+      final segs =
+          SegmentationService.parseAndValidate(json, 0, 480);
+      expect(segs, hasLength(2));
+      expect(segs[0].startSec, 30);
+      expect(segs[1].startSec, 300);
+    });
+
     test('rejects segments outside the chunk range', () {
       const json =
           '{"segments":[{"type":"topic","title":"A","start":0,"end":500}]}';

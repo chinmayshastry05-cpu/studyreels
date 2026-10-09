@@ -22,9 +22,9 @@ Each line starts with [mm:ss] followed by what the lecturer said.
 3. "start" and "end" must lie inside [{{CHUNK_START}}, {{CHUNK_END}}],
    with start < end.
 4. Segments must be sorted by start time and must NOT overlap.
-5. Cover the whole chunk with no gaps: the first segment starts at
-   {{CHUNK_START}} and each segment's start equals the previous end,
-   except the last segment which ends at {{CHUNK_END}}.
+5. Gaps are allowed: only create segments for real topics and worked
+   problems. Do NOT invent filler segments to cover intros, tangents,
+   silence, or off-topic chatter — leave those parts unsegmented.
 6. Mark a segment "problem" only when the lecturer solves a worked
    example, numerical, or exercise. Everything else is "topic".
 7. Keep titles specific: name the concept or the problem being solved.
