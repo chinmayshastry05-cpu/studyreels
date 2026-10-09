@@ -29,17 +29,20 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # NOTE: android-actions/setup-android@v3 was removed — it fails on the
+      # current runner image ("Failed to find package 'tools'"). The runner
+      # already ships the Android SDK ($ANDROID_HOME) with cmdline-tools,
+      # so install what we need directly with sdkmanager.
       - name: Install NDK + platform + build-tools
         run: |
-          sdkmanager --install \
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-${{ env.ANDROID_API }}" \
             "build-tools;34.0.0" \
             "ndk;${{ env.NDK_VERSION }}"
-          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${{ env.NDK_VERSION }}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> "$GITHUB_ENV"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
