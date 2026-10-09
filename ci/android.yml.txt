@@ -132,12 +132,9 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Build libcactus_engine.so (arm64-v8a)
-        run: |
-          bash third_party/cactus/android/build.sh
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          cp third_party/cactus/android/libcactus_engine.so \
-             android/app/src/main/jniLibs/arm64-v8a/
+      # No Cactus engine build here: the integration APK targets x86_64
+      # (the emulator's ABI) and the engine .so is arm64-only, so it would
+      # not be packaged anyway. The integration tests never load it.
 
       - name: flutter pub get
         run: flutter pub get
@@ -153,6 +150,14 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run integration tests on emulator
+        # Fail fast at the step level too: boot (~1 min) + APK build
+        # (~5 min) + 3 tests (~1 min) when healthy.
+        timeout-minutes: 15
+        # Gradle project property -> build.gradle.kts `targetAbi`: build the
+        # integration APK for the emulator's x86_64 ABI. The arm64-only
+        # APK hangs the x86_64 package installer (run 37909947967).
+        env:
+          ORG_GRADLE_PROJECT_targetAbi: x86_64
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -172,4 +177,12 @@ jobs:
           # can read it back for MediaExtractor/video_player.
           script: |
             adb push integration_test/fixtures/test_video.mp4 /data/local/tmp/test_video.mp4
-            flutter test integration_test --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4
+            flutter test integration_test --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4 || { echo "--- dumping logcat ---"; adb logcat -d > "$GITHUB_WORKSPACE/logcat.txt"; exit 1; }
+
+      - name: Upload logcat on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-logcat
+          path: logcat.txt
+          if-no-files-found: ignore

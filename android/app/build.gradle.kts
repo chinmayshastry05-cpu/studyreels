@@ -25,7 +25,13 @@ android {
             // Snapdragon 7 Gen 1 is arm64. Keep the build lean: one ABI.
             // libcactus_engine.so is built with `cactus build --android`
             // and placed in src/main/jniLibs/arm64-v8a/ (see README).
-            abiFilters += "arm64-v8a"
+            // The emulator integration job overrides this with
+            // -PtargetAbi=x86_64 (the Cactus engine .so is arm64-only and
+            // is simply not packaged; the integration tests never load it
+            // — DynamicLibrary.open is lazy).
+            val targetAbi = project.findProperty("targetAbi") as String?
+                ?: "arm64-v8a"
+            abiFilters += targetAbi
         }
     }
 
