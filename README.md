@@ -117,7 +117,9 @@ cactus build --android
 
 ## Transcription (phase 2C)
 
-Lecture audio → timestamped transcript, 100% on-device:
+Lecture audio → timestamped transcript, 100% on-device. This is **Cactus
+`cactus_transcribe` with the whisper-base bundle** — not whisper.cpp; no
+separate ASR engine is used.
 
 1. **Audio extraction** — `AudioExtractor` (Android `MediaExtractor` +
    `MediaCodec`, platform channel `com.studyreels.app/audio`) decodes the
@@ -139,8 +141,26 @@ Lecture audio → timestamped transcript, 100% on-device:
 ./scripts/push_model.sh <bundle-dir> whisper-base   # push to the phone
 ```
 
-Status: services + chunker + tests are in; on-device transcription speed /
-accuracy not yet measured (needs a real phone run).
+### Transcription test plan (on the Galaxy F55 5G, not yet run)
+
+Record or pick 4 short lecture clips (2–5 min each): pure Hindi, pure
+English, Kannada, and a mixed Hindi/English lecture (the realistic case).
+For each clip:
+
+1. Push the whisper-base bundle, import the clip in the app, run the
+   pipeline to the transcript stage.
+2. Measure **word accuracy**: transcribe a 60-second slice by hand (or with
+   a trusted reference) and compute WER = (substitutions + deletions +
+   insertions) / reference words. Target: < 20% WER on English, < 30% on
+   Hindi/Kannada/mixed for phase 2; revisit model size if missed.
+3. Measure **processing time**: wall-clock seconds per audio minute
+   (target: comfortably below real-time on the Snapdragon 7 Gen 1) and
+   note peak RAM.
+4. Check **timestamp sanity**: segment boundaries should land within ~2s
+   of actual speech pauses; flag drift on long clips.
+
+Status: services + chunker + unit tests are in; the plan above is untested —
+it needs a real phone run.
 
 ## Feed, playback & library (phase 2D)
 
@@ -202,16 +222,15 @@ still phase-1 work).
 - Cactus license terms verified from the repo LICENSE file.
 - Cactus submodule pinned at commit `2cfcdb8` (v2.2.2, shallow clone).
 
-**NOT verified / untested:**
+**Proven vs untested:**
 
-- `libcactus_engine.so` was **not** built here (no Android NDK in this
-  environment). The Dart FFI service code is written against the documented
-  binding API but is **UNTESTED** against a real engine build.
-- `flutter build apk` was **not** run here.
-- On-device inference (segmentation quality, speed, RAM on Snapdragon 7 Gen 1)
-  is untested — that happens on the Galaxy F55 5G.
-- Transcription (whisper/moonshine/parakeet via Cactus) is built into Cactus
-  for later phases; not wired yet.
+- PROVEN (CI, run 37890376290): `libcactus_engine.so` built from source for
+  arm64-v8a via `third_party/cactus/android/build.sh`; `flutter analyze`
+  clean; 49 unit tests green; debug APK built and released as
+  v0.1.0-debug.
+- UNTESTED on real hardware: on-device LLM inference (segmentation quality,
+  speed, RAM on Snapdragon 7 Gen 1), transcription accuracy/speed (see the
+  test plan above), video import + playback — all need the Galaxy F55 5G.
 - YouTube import via yt-dlp: planned, not implemented.
 
 ## Phase 2 — fine-tune plan (documented, NOT started)
