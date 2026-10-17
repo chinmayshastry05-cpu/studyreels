@@ -75,7 +75,12 @@ class _ModelMissingScreenState extends State<ModelMissingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('StudyReels')),
-      body: Padding(
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -158,6 +163,10 @@ class _ModelMissingScreenState extends State<ModelMissingScreen> {
               ),
             ],
           ],
+        ),
+      ),
+            ),
+          ),
         ),
       ),
     );

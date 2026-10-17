@@ -15,9 +15,23 @@ void main() {
       expect(totalDownloadBytes,
           qwen3Bundle.sizeBytes + whisperBundle.sizeBytes);
       for (final b in requiredBundles) {
-        expect(b.url, startsWith('https://huggingface.co/'));
+        expect(b.urls.length, greaterThanOrEqualTo(2));
+        // GitHub release mirror first (fast CDN), Hugging Face as fallback.
+        expect(b.urls.first, startsWith('https://github.com/'));
+        expect(b.urls.last, startsWith('https://huggingface.co/'));
         expect(b.sha256.length, 64);
       }
+    });
+
+    test('sanitizeError strips URLs and caps length', () {
+      const raw = 'HttpException: Connection closed while receiving data, '
+          'uri = https://us.aws.cdn.hf.co/xet-bridge/abc?Policy=verylongsignedquery';
+      final clean = ModelDownloader.sanitizeError(raw);
+      expect(clean, isNot(contains('http')));
+      expect(clean, contains('Connection closed'));
+      expect(clean.length, lessThanOrEqualTo(120));
+      expect(ModelDownloader.sanitizeError('x' * 500).length,
+          lessThanOrEqualTo(120));
     });
 
     test('extractZip unpacks a flat zip into the dest dir', () async {

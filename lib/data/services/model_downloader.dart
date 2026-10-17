@@ -5,18 +5,22 @@ import 'dart:isolate';
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 
-/// One downloadable on-device model bundle (a Cactus .weights zip hosted on
-/// Hugging Face, Apache-2.0, public and ungated).
+/// One downloadable on-device model bundle (a Cactus .weights zip, Apache-2.0,
+/// public and ungated). [urls] lists identical mirrors in preference order:
+/// the GitHub release asset first (fast CDN), the Hugging Face original as
+/// fallback. Bytes are identical across mirrors, so a partial download
+/// resumes seamlessly on the next mirror, and the sha-256 check guarantees
+/// integrity regardless of which mirror served the bytes.
 class ModelBundle {
   final String label;
-  final String url;
+  final List<String> urls;
   final String destDirName;
   final int sizeBytes;
   final String sha256;
 
   const ModelBundle({
     required this.label,
-    required this.url,
+    required this.urls,
     required this.destDirName,
     required this.sizeBytes,
     required this.sha256,
@@ -27,8 +31,10 @@ class ModelBundle {
 /// app runs 100% on-device (inference never touches the network).
 const qwen3Bundle = ModelBundle(
   label: 'Language model (Qwen3 0.6B int4)',
-  url:
-      'https://huggingface.co/Cactus-Compute/Qwen3-0.6B/resolve/main/weights/qwen3-0.6b-int4.zip',
+  urls: [
+    'https://github.com/chinmayshastry05-cpu/studyreels/releases/download/models-v1/qwen3-0.6b-int4.zip',
+    'https://huggingface.co/Cactus-Compute/Qwen3-0.6B/resolve/main/weights/qwen3-0.6b-int4.zip',
+  ],
   destDirName: 'qwen3-0.6b-int4',
   sizeBytes: 376414357,
   sha256: '2f4f5e3b91fc62168e66a592d09cfd1792a0b96e1994d46b5de77ddebbf94427',
@@ -36,8 +42,10 @@ const qwen3Bundle = ModelBundle(
 
 const whisperBundle = ModelBundle(
   label: 'Speech model (whisper-base int4)',
-  url:
-      'https://huggingface.co/Cactus-Compute/whisper-base/resolve/main/weights/whisper-base-int4.zip',
+  urls: [
+    'https://github.com/chinmayshastry05-cpu/studyreels/releases/download/models-v1/whisper-base-int4.zip',
+    'https://huggingface.co/Cactus-Compute/whisper-base/resolve/main/weights/whisper-base-int4.zip',
+  ],
   destDirName: 'whisper-base',
   sizeBytes: 76245569,
   sha256: '3c3cd19ad9499a31ebc3a9c7833d718bb841d48e871e57db4024d7666aa8bbe7',
@@ -53,6 +61,13 @@ class ModelDownloadException implements Exception {
   const ModelDownloadException(this.message);
   @override
   String toString() => message;
+}
+
+/// A mirror answered with an HTTP status we cannot download from. Retrying
+/// the same mirror will not help; move straight to the next one.
+class _StatusException implements Exception {
+  final int statusCode;
+  const _StatusException(this.statusCode);
 }
 
 /// Download progress phases, surfaced by the UI.
@@ -71,6 +86,10 @@ typedef ProgressCallback = void Function(
 ///   models/<destDirName>/            extracted bundle (what Cactus loads)
 ///   models/.downloads/<dest>.part    partial zip, kept between retries
 class ModelDownloader {
+  /// Each mirror is tried this many times (resuming where it stopped)
+  /// before the next mirror takes over.
+  static const int attemptsPerMirror = 3;
+
   final String appFilesDir;
   final HttpClient Function() clientFactory;
 
@@ -128,13 +147,52 @@ class ModelDownloader {
     }
   }
 
+  /// Strips embedded request URLs and caps length, so an error shown in the
+  /// UI stays short and readable (CDN URLs carry huge signed query strings).
+  static String sanitizeError(Object error) {
+    var s = error.toString();
+    s = s.replaceAll(RegExp(r',?\s*uri\s*=\s*\S+'), '');
+    s = s.trim();
+    if (s.isEmpty) return 'network error';
+    if (s.length > 120) s = '${s.substring(0, 117)}...';
+    return s;
+  }
+
+  /// Tries each mirror in turn, resuming the .part file on every attempt.
   Future<void> _download(ModelBundle b, File part,
+      void Function(int received) onChunk) async {
+    Object? lastError;
+    for (final url in b.urls) {
+      for (var attempt = 0; attempt < attemptsPerMirror; attempt++) {
+        try {
+          await _downloadOnce(url, b, part, onChunk);
+          return;
+        } on _StatusException catch (e) {
+          // This mirror cannot serve the file; try the next mirror now.
+          lastError = 'server answered HTTP ${e.statusCode}';
+          break;
+        } catch (e) {
+          // Dropped connection, timeout, DNS... wait a moment and resume
+          // on the same mirror.
+          lastError = e;
+          await Future<void>.delayed(Duration(seconds: 1 << attempt));
+        }
+      }
+    }
+    throw ModelDownloadException(
+        'Download interrupted (${sanitizeError(lastError ?? 'network error')}). '
+        'Tap Retry - it resumes where it stopped.');
+  }
+
+  /// One attempt against one mirror. Resumes the .part file when the server
+  /// honors the Range header; otherwise restarts it. Throws on any failure.
+  Future<void> _downloadOnce(String url, ModelBundle b, File part,
       void Function(int received) onChunk) async {
     final resumeFrom = await part.exists() ? await part.length() : 0;
     if (resumeFrom >= b.sizeBytes && resumeFrom > 0) return; // already complete
     final client = clientFactory();
     try {
-      final request = await client.getUrl(Uri.parse(b.url));
+      final request = await client.getUrl(Uri.parse(url));
       if (resumeFrom > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$resumeFrom-');
       }
@@ -147,8 +205,7 @@ class ModelDownloader {
         sink = part.openWrite(); // restart from scratch
         received = 0;
       } else {
-        throw ModelDownloadException(
-            'Download failed (HTTP ${response.statusCode}). Check your connection and retry.');
+        throw _StatusException(response.statusCode);
       }
       try {
         await for (final chunk in response) {
@@ -160,11 +217,6 @@ class ModelDownloader {
       } finally {
         await sink.close();
       }
-    } on ModelDownloadException {
-      rethrow;
-    } catch (e) {
-      throw ModelDownloadException(
-          'Download interrupted. Tap retry - it will resume where it stopped. ($e)');
     } finally {
       client.close();
     }
