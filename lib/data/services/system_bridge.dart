@@ -27,12 +27,16 @@ class SystemBridge {
   /// Throws on a real unzip failure.
   static Future<bool> unzip(String zip, String dest,
       void Function(int done, int total, String name) onProgress) async {
-    _ensureHandler();
     _onUnzip = onProgress;
     try {
+      _ensureHandler();
       await _ch.invokeMethod<bool>('unzip', {'zip': zip, 'dest': dest});
       return true;
     } on MissingPluginException {
+      return false;
+    } on AssertionError {
+      // No platform binding (unit tests): use the Dart fallback.
+      _handlerSet = false;
       return false;
     } finally {
       _onUnzip = null;
