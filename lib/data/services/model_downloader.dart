@@ -5,6 +5,8 @@ import 'dart:isolate';
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 
+import 'system_bridge.dart';
+
 /// One downloadable on-device model bundle (a Cactus .weights zip, Apache-2.0,
 /// public and ungated). [urls] lists identical mirrors in preference order:
 /// the GitHub release asset first (fast CDN), the Hugging Face original as
@@ -90,6 +92,11 @@ class ModelDownloader {
   /// before the next mirror takes over.
   static const int attemptsPerMirror = 3;
 
+  void Function(String line)? _log;
+
+  /// No unzip progress for this long means the unpack is stuck.
+  static const Duration unpackStall = Duration(seconds: 90);
+
   final String appFilesDir;
   final HttpClient Function() clientFactory;
 
@@ -123,7 +130,9 @@ class ModelDownloader {
   /// Downloads and extracts every bundle that is not yet installed.
   /// Resumes any .part file left by an earlier attempt. Throws
   /// [ModelDownloadException] on failure; retrying picks up where it left off.
-  Future<void> ensureInstalled(ProgressCallback onProgress) async {
+  Future<void> ensureInstalled(ProgressCallback onProgress,
+      {void Function(String line)? onLog}) async {
+    _log = onLog;
     var doneBefore = 0;
     for (final b in requiredBundles) {
       if (await isInstalled(b)) {
@@ -138,10 +147,14 @@ class ModelDownloader {
       });
       onProgress(DownloadPhase.verifying, b.label,
           doneBefore + b.sizeBytes, totalDownloadBytes);
+      _log?.call('sha256sum ${b.destDirName}.zip ...');
       await _verify(b, part);
+      _log?.call('sha256 OK ${b.sha256.substring(0, 16)}...');
       onProgress(DownloadPhase.extracting, b.label,
           doneBefore + b.sizeBytes, totalDownloadBytes);
-      await _extract(b, part);
+      _log?.call('unzip ${b.destDirName}.zip');
+      await _extractWithRetry(b, part);
+      _log?.call('installed ${b.destDirName}');
       await part.delete();
       doneBefore += b.sizeBytes;
     }
@@ -237,13 +250,27 @@ class ModelDownloader {
   }
 
   /// Extracts the zip into models/<destDirName>/ (atomically via a temp dir).
-  Future<void> _extract(ModelBundle b, File part) =>
-      extractZip(part.path, _destPath(b));
+  Future<void> _extract(ModelBundle b, File part) => extractZip(
+      part.path, _destPath(b),
+      onFile: (d, t, name) => _log?.call('  inflating [$d/$t] $name'),
+      stall: unpackStall);
+
+  /// One automatic retry if the unpack fails or stalls.
+  Future<void> _extractWithRetry(ModelBundle b, File part) async {
+    try {
+      await _extract(b, part);
+    } catch (e) {
+      _log?.call('unpack failed (${sanitizeError(e)}), retrying once');
+      await _extract(b, part);
+    }
+  }
 
   /// Extracts [zipPath] into [destPath] (atomically via a temp dir next to
   /// it). If the zip wraps everything in a single top-level folder, that
   /// folder is lifted. Public so it is unit-testable without the network.
-  static Future<void> extractZip(String zipPath, String destPath) async {
+  static Future<void> extractZip(String zipPath, String destPath,
+      {void Function(int done, int total, String name)? onFile,
+      Duration stall = const Duration(seconds: 90)}) async {
     final part = File(zipPath);
     final dest = Directory(destPath);
     final tmp = Directory('$destPath.extract');
@@ -252,10 +279,35 @@ class ModelDownloader {
     try {
       final partPath = part.path;
       final tmpPath = tmp.path;
-      // extractFileToDisk is CPU-bound; keep it off the UI isolate.
-      await Isolate.run(() {
-        extractFileToDisk(partPath, tmpPath);
+      // Prefer the native streaming unzip (fast, per-file progress, no big
+      // in-memory archive). Fall back to the Dart unzip off-device.
+      var last = DateTime.now();
+      final native = SystemBridge.unzip(partPath, tmpPath, (d, t, name) {
+        last = DateTime.now();
+        onFile?.call(d, t, name);
       });
+      native.ignore();
+      final watchdog = Completer<bool>();
+      final timer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (!watchdog.isCompleted &&
+            DateTime.now().difference(last) > stall) {
+          SystemBridge.cancelUnzip();
+          watchdog.completeError(
+              const ModelDownloadException('Unpacking stalled (no progress).'));
+        }
+      });
+      bool usedNative;
+      try {
+        usedNative = await Future.any([native, watchdog.future]);
+      } finally {
+        timer.cancel();
+      }
+      if (!usedNative) {
+        // extractFileToDisk is CPU-bound; keep it off the UI isolate.
+        await Isolate.run(() {
+          extractFileToDisk(partPath, tmpPath);
+        });
+      }
 
       // If the zip wrapped everything in a single top-level folder, lift it.
       final entries = await tmp.list().toList();

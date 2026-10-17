@@ -1,6 +1,20 @@
 package com.studyreels.app;
 
+import android.Manifest;
+import android.app.NotificationManager;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
+
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -24,11 +38,143 @@ import io.flutter.plugin.common.MethodChannel;
 public class MainActivity extends FlutterActivity {
     private static final String AUDIO_CHANNEL = "com.studyreels.app/audio";
     private static final String EXPORT_CHANNEL = "com.studyreels.app/export";
+    private static final String SYSTEM_CHANNEL = "com.studyreels.app/system";
+    private static final int REQ_PERMS = 7001;
+    private MethodChannel.Result pendingPerms;
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
+        final MethodChannel sys = new MethodChannel(
+                flutterEngine.getDartExecutor().getBinaryMessenger(),
+                SYSTEM_CHANNEL);
+        sys.setMethodCallHandler((call, result) -> {
+            switch (call.method) {
+                case "unzip": {
+                    String zip = call.argument("zip");
+                    String dest = call.argument("dest");
+                    if (zip == null || dest == null) {
+                        result.error("BAD_ARGS", "zip and dest required", null);
+                        break;
+                    }
+                    bg.execute(() -> {
+                        try {
+                            final long[] last = {0};
+                            Unzipper.unzip(zip, dest, (d, t, name) -> {
+                                long now = System.currentTimeMillis();
+                                if (d != t && now - last[0] < 100) return;
+                                last[0] = now;
+                                java.util.HashMap<String, Object> m =
+                                        new java.util.HashMap<>();
+                                m.put("done", d);
+                                m.put("total", t);
+                                m.put("name", name);
+                                runOnUiThread(() ->
+                                        sys.invokeMethod("unzipProgress", m));
+                            });
+                            runOnUiThread(() -> result.success(true));
+                        } catch (Exception e) {
+                            runOnUiThread(() -> result.error("UNZIP_FAILED",
+                                    String.valueOf(e.getMessage()), null));
+                        }
+                    });
+                    break;
+                }
+                case "unzipCancel":
+                    Unzipper.cancelled = true;
+                    result.success(true);
+                    break;
+                case "missingPermissions":
+                    result.success(missingPermissions());
+                    break;
+                case "requestPermissions": {
+                    List<String> missing = missingPermissions();
+                    if (missing.isEmpty()) {
+                        result.success(true);
+                    } else if (pendingPerms != null) {
+                        result.error("BUSY", "request in progress", null);
+                    } else {
+                        pendingPerms = result;
+                        ActivityCompat.requestPermissions(this,
+                                missing.toArray(new String[0]), REQ_PERMS);
+                    }
+                    break;
+                }
+                case "isIgnoringBattery": {
+                    PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                    result.success(pm.isIgnoringBatteryOptimizations(getPackageName()));
+                    break;
+                }
+                case "requestIgnoreBattery": {
+                    try {
+                        Intent i = new Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:" + getPackageName()));
+                        startActivity(i);
+                        result.success(true);
+                    } catch (Exception e) {
+                        result.success(false);
+                    }
+                    break;
+                }
+                case "startService":
+                case "updateService": {
+                    String title = call.argument("title");
+                    String text = call.argument("text");
+                    Number pct = call.argument("percent");
+                    Intent i = new Intent(this, DownloadService.class);
+                    i.setAction(call.method.equals("startService")
+                            ? DownloadService.ACTION_START
+                            : DownloadService.ACTION_UPDATE);
+                    i.putExtra("title", title);
+                    i.putExtra("text", text);
+                    i.putExtra("percent", pct == null ? -1 : pct.intValue());
+                    try {
+                        if (call.method.equals("startService")
+                                && Build.VERSION.SDK_INT >= 26) {
+                            startForegroundService(i);
+                        } else {
+                            startService(i);
+                        }
+                        result.success(true);
+                    } catch (Exception e) {
+                        result.success(false);
+                    }
+                    break;
+                }
+                case "stopService": {
+                    Intent i = new Intent(this, DownloadService.class);
+                    i.setAction(DownloadService.ACTION_STOP);
+                    try {
+                        startService(i);
+                    } catch (Exception ignored) {
+                    }
+                    result.success(true);
+                    break;
+                }
+                case "notifyDone": {
+                    String title = call.argument("title");
+                    String text = call.argument("text");
+                    DownloadService.ensureChannels(this);
+                    boolean ok = call.argument("ok") == null
+                            || Boolean.TRUE.equals(call.argument("ok"));
+                    android.app.Notification n = DownloadService.build(this,
+                            title == null ? "StudyReels" : title,
+                            text == null ? "" : text, -1, false,
+                            DownloadService.CH_DONE);
+                    try {
+                        getSystemService(NotificationManager.class)
+                                .notify(DownloadService.ID_DONE, n);
+                    } catch (Exception ignored) {
+                    }
+                    result.success(ok);
+                    break;
+                }
+                default:
+                    result.notImplemented();
+            }
+        });
         new MethodChannel(
                 flutterEngine.getDartExecutor().getBinaryMessenger(),
                 EXPORT_CHANNEL).setMethodCallHandler((call, result) -> {
@@ -85,6 +231,38 @@ public class MainActivity extends FlutterActivity {
                 result.notImplemented();
             }
         });
+    }
+
+    private List<String> missingPermissions() {
+        List<String> need = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= 33) {
+            need.add(Manifest.permission.POST_NOTIFICATIONS);
+            need.add(Manifest.permission.READ_MEDIA_VIDEO);
+        } else if (Build.VERSION.SDK_INT >= 23) {
+            need.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
+        if (Build.VERSION.SDK_INT <= 28) {
+            need.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
+        List<String> missing = new ArrayList<>();
+        for (String p : need) {
+            if (ContextCompat.checkSelfPermission(this, p)
+                    != PackageManager.PERMISSION_GRANTED) {
+                missing.add(p);
+            }
+        }
+        return missing;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+            @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_PERMS && pendingPerms != null) {
+            MethodChannel.Result r = pendingPerms;
+            pendingPerms = null;
+            r.success(missingPermissions().isEmpty());
+        }
     }
 
     @Override

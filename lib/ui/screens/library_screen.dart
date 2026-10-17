@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/models/chapter.dart';
 import '../../data/services/library_store.dart';
+import '../widgets/fx.dart';
 import '../widgets/reel_player.dart';
 
 /// Saved reels organized by chapter, then topic/problem. Tapping a reel
@@ -16,14 +17,20 @@ class LibraryScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Library')),
       body: chapters.isEmpty
-          ? const Center(
+          ? Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'Your saved reels will appear here, organized by chapter and topic.\n\n'
-                  'Import a lecture video to get started.',
-                  textAlign: TextAlign.center,
-                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.video_library_outlined,
+                      size: 56,
+                      color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Your saved reels will appear here, organized by chapter and topic.\n\n'
+                    'Import a lecture video to get started.',
+                    textAlign: TextAlign.center,
+                  ),
+                ]),
               ),
             )
           : ListView.builder(
@@ -35,39 +42,43 @@ class LibraryScreen extends StatelessWidget {
   }
 
   Widget _chapterTile(BuildContext context, Chapter chapter) {
-    return ExpansionTile(
+    return GlowCard(
+      padding: EdgeInsets.zero,
+      child: ExpansionTile(
+      shape: const Border(),
+      collapsedShape: const Border(),
       title: Text(chapter.name,
           style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(
           '${chapter.topics.length} topics · ${chapter.problems.length} problems'),
       children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 16, top: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 16, top: 4),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text('TOPICS',
                 style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white54,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.bold)),
           ),
         ),
         ...chapter.topics.map((r) => _reelTile(context, r)),
-        const Padding(
-          padding: EdgeInsets.only(left: 16, top: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 16, top: 8),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text('PROBLEMS',
                 style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white54,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.bold)),
           ),
         ),
         ...chapter.problems.map((r) => _reelTile(context, r)),
         const SizedBox(height: 8),
       ],
-    );
+    ));
   }
 
   Widget _reelTile(BuildContext context, reel) {

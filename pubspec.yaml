@@ -1,7 +1,7 @@
 name: studyreels
 description: Fully local study app — lecture videos split into topic/problem reels by a tiny on-device LLM.
 publish_to: "none"
-version: 0.1.4+4
+version: 0.1.5+5
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

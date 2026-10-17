@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../widgets/fx.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -142,14 +144,14 @@ class _ImportScreenState extends State<ImportScreen> {
             ),
             if (_running) ...[
               const SizedBox(height: 24),
-              const Center(child: CircularProgressIndicator()),
+              const BeamProgress(),
               const SizedBox(height: 12),
               Text(_stage, textAlign: TextAlign.center),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'On-device: transcription can take several minutes for a long lecture. Keep the app open.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
               ),
             ],
             if (_error != null) ...[
@@ -158,14 +160,14 @@ class _ImportScreenState extends State<ImportScreen> {
                   style: const TextStyle(color: Colors.redAccent)),
             ],
             const Spacer(),
-            const Text(
+            Text(
               'Pipeline (all on-device, no internet):\n'
               '1. Extract audio from the video\n'
               '2. Transcribe with whisper-base (background isolate)\n'
               '3. Split into 1.2K–2K token chunks\n'
               '4. Tiny LLM finds topic/problem boundaries\n'
               '5. Reels saved to your library by chapter',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
             ),
           ],
         ),

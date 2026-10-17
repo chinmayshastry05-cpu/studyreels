@@ -8,20 +8,75 @@ import 'ui/screens/feed_screen.dart';
 import 'ui/screens/import_screen.dart';
 import 'ui/screens/library_screen.dart';
 import 'ui/screens/model_missing_screen.dart';
+import 'ui/screens/permissions_screen.dart';
+import 'ui/widgets/fx.dart';
 
 void main() {
   runApp(const StudyReelsApp());
 }
+
+ThemeData _buildTheme(Brightness brightness) {
+  const seed = Color(0xFF7C5CFF);
+  final dark = brightness == Brightness.dark;
+  final bg = dark ? const Color(0xFF0B0A12) : const Color(0xFFF6F4FF);
+  final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+  final base = ThemeData(useMaterial3: true, colorScheme: scheme);
+  return base.copyWith(
+    scaffoldBackgroundColor: bg,
+    textTheme: base.textTheme.apply(
+        bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+          color: scheme.onSurface),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: scheme.surface.withValues(alpha: 0.85),
+      indicatorColor: seed.withValues(alpha: 0.3),
+      height: 68,
+      labelTextStyle: WidgetStateProperty.all(
+          const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+    ),
+  );
+}
+
+/// Light / dark / follow system. Toggle button lives in the home shell.
+final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.system);
 
 class StudyReelsApp extends StatelessWidget {
   const StudyReelsApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'StudyReels',
-      theme: ThemeData.dark(useMaterial3: true),
-      home: const StartupGate(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeMode,
+      builder: (_, mode, __) => MaterialApp(
+        title: 'StudyReels',
+        theme: _buildTheme(Brightness.light),
+        darkTheme: _buildTheme(Brightness.dark),
+        themeMode: mode,
+        home: const StartupGate(),
+      ),
     );
   }
 }
@@ -37,6 +92,7 @@ class StartupGate extends StatefulWidget {
 
 class _StartupGateState extends State<StartupGate> {
   late Future<_Startup> _startup;
+  bool _onboarded = true;
 
   @override
   void initState() {
@@ -45,6 +101,7 @@ class _StartupGateState extends State<StartupGate> {
   }
 
   Future<_Startup> _runStartup() async {
+    _onboarded = await PermissionsScreen.isDone();
     final docs = await getApplicationDocumentsDirectory();
     final expected = ModelStore.expectedModelPath(docs.path);
     final present = await ModelStore.isModelPresent(docs.path) &&
@@ -76,6 +133,9 @@ class _StartupGateState extends State<StartupGate> {
           );
         }
         final startup = snap.data!;
+        if (!_onboarded) {
+          return PermissionsScreen(onDone: _retry);
+        }
         if (!startup.modelPresent) {
           return ModelMissingScreen(
             expectedPath: startup.expectedPath,
@@ -120,14 +180,50 @@ class _HomeShellState extends State<HomeShell> {
       ImportScreen(onDone: () => setState(() => _index = 0)),
     ];
     return Scaffold(
-      body: screens[_index],
+      extendBody: false,
+      body: AuroraBackground(
+        child: Theme(
+          data: Theme.of(context)
+              .copyWith(scaffoldBackgroundColor: Colors.transparent),
+          child: Stack(children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child:
+                  KeyedSubtree(key: ValueKey(_index), child: screens[_index]),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 4,
+              right: 8,
+              child: IconButton(
+                tooltip: 'Light / dark',
+                icon: Icon(Theme.of(context).brightness == Brightness.dark
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined),
+                onPressed: () => themeMode.value =
+                    Theme.of(context).brightness == Brightness.dark
+                        ? ThemeMode.light
+                        : ThemeMode.dark,
+              ),
+            ),
+          ]),
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.play_arrow), label: 'Reels'),
-          NavigationDestination(icon: Icon(Icons.folder), label: 'Library'),
-          NavigationDestination(icon: Icon(Icons.add), label: 'Import'),
+          NavigationDestination(
+              icon: Icon(Icons.play_circle_outline),
+              selectedIcon: Icon(Icons.play_circle),
+              label: 'Reels'),
+          NavigationDestination(
+              icon: Icon(Icons.folder_outlined),
+              selectedIcon: Icon(Icons.folder),
+              label: 'Library'),
+          NavigationDestination(
+              icon: Icon(Icons.add_circle_outline),
+              selectedIcon: Icon(Icons.add_circle),
+              label: 'Import'),
         ],
       ),
     );
