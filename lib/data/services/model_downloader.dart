@@ -265,6 +265,13 @@ class ModelDownloader {
     }
   }
 
+  /// Dart fallback unzip, in its own top-level-style scope so the isolate
+  /// closure captures only two strings.
+  static Future<void> _dartUnzip(String zipPath, String outPath) =>
+      Isolate.run(() {
+        extractFileToDisk(zipPath, outPath);
+      });
+
   /// Extracts [zipPath] into [destPath] (atomically via a temp dir next to
   /// it). If the zip wraps everything in a single top-level folder, that
   /// folder is lifted. Public so it is unit-testable without the network.
@@ -304,9 +311,7 @@ class ModelDownloader {
       }
       if (!usedNative) {
         // extractFileToDisk is CPU-bound; keep it off the UI isolate.
-        await Isolate.run(() {
-          extractFileToDisk(partPath, tmpPath);
-        });
+        await _dartUnzip(partPath, tmpPath);
       }
 
       // If the zip wrapped everything in a single top-level folder, lift it.
