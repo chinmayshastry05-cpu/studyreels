@@ -47,7 +47,8 @@ class _StartupGateState extends State<StartupGate> {
   Future<_Startup> _runStartup() async {
     final docs = await getApplicationDocumentsDirectory();
     final expected = ModelStore.expectedModelPath(docs.path);
-    final present = await ModelStore.isModelPresent(docs.path);
+    final present = await ModelStore.isModelPresent(docs.path) &&
+        await ModelStore.isWhisperPresent(docs.path);
     final library = LibraryStore();
     if (present) {
       await library.load();

@@ -64,8 +64,8 @@ class _ImportScreenState extends State<ImportScreen> {
       final whisperDir = ModelStore.expectedWhisperPath(docs.path);
       if (!await ModelStore.isWhisperPresent(docs.path)) {
         throw const PipelineException(
-            'Whisper model missing. Run scripts/download_transcriber.sh then '
-            './scripts/push_model.sh <bundle-dir> whisper-base');
+            'Speech model missing. Restart the app - the startup screen will '
+            'offer to re-download it.');
       }
       final template = await rootBundle
           .loadString('assets/prompts/segmentation_prompt.md');

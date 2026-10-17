@@ -11,7 +11,8 @@ calls — at inference the phone never touches the network.**
    fine-tuned into a *specialist* for exactly one job — lecture transcript
    → topic/problem boundaries (JSON). Master of one, not jack of all.
 2. **100% local inference.** No cloud APIs, no paid services, no analytics,
-   no telemetry. The app does not even request the INTERNET permission.
+   no telemetry. INTERNET permission exists only for the one-time first-launch
+   model download; inference never touches the network.
 3. **Reels are timestamp-based**: original video + start/end + overlay
    captions. Never re-rendered clips.
 
@@ -111,7 +112,8 @@ cactus build --android
 # → copy android/libcactus_engine.so to
 #   studyreels/android/app/src/main/jniLibs/arm64-v8a/
 
-# 3. Fetch the tiny model bundle (one-time, dev machine only)
+# 3. Model bundles download themselves on first launch (in-app, resumable).
+#    Manual dev-machine path still works:
 ./scripts/download_model.sh
 # → prebuilt Cactus-Compute/Qwen3-0.6B int4 bundle (~400 MB)
 
@@ -137,6 +139,7 @@ separate ASR engine is used.
    (`cactus_tokenize`), ready for the topic-boundary LLM.
 
 ```bash
+# In-app first-launch download covers this; manual path for dev:
 ./scripts/download_transcriber.sh          # fetch whisper-base (dev machine)
 ./scripts/push_model.sh <bundle-dir> whisper-base   # push to the phone
 ```
@@ -176,8 +179,7 @@ it needs a real phone run.
   via `VideoExporter` (Android `MediaExtractor` + `MediaMuxer`, **stream-copy
   trim — no re-encode, fast, keyframe-aligned**: the clip starts at the
   keyframe at/before the reel start). Saved through `MediaStore` to
-  `Movies/StudyReels`, scoped-storage compliant, no storage or INTERNET
-  permission. Burned-in captions would need a full re-encode pass, so they
+  `Movies/StudyReels`, scoped-storage compliant, no storage permission. Burned-in captions would need a full re-encode pass, so they
   are a separate optional export, not the default (not built yet).
 - **Import tab**: pick videos from the device gallery with the system picker
   (`image_picker` — no broad storage permission). YouTube import via yt-dlp

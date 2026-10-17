@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:studyreels/ui/screens/model_missing_screen.dart';
 
 void main() {
-  testWidgets('shows the exact expected model path', (tester) async {
+  testWidgets('offers the in-app download and keeps the recheck path',
+      (tester) async {
     const path =
         '/data/data/com.studyreels.app/files/models/qwen3-0.6b-int4';
     var rechecked = false;
@@ -16,9 +17,9 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('Model not found'), findsOneWidget);
+    expect(find.textContaining('Models not found'), findsOneWidget);
     expect(find.text(path), findsOneWidget);
-    expect(find.textContaining('push_model.sh'), findsOneWidget);
+    expect(find.textContaining('Download models'), findsOneWidget);
 
     await tester.tap(find.text('Recheck'));
     expect(rechecked, isTrue);

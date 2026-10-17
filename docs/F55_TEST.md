@@ -1,7 +1,7 @@
 # StudyReels — Round-2 test plan (Galaxy F55 5G)
 
 Target device: Galaxy F55 5G (Snapdragon 7 Gen 1). Everything below is
-100% on-device; the app has no INTERNET permission by design.
+100% on-device after the one-time first-launch model download.
 
 ## 0. Prerequisites
 
@@ -20,13 +20,14 @@ SHA-256), then:
 adb install studyreels-debug-arm64.apk
 ```
 
-## 2. Verify the model-missing screen (before pushing models)
+## 2. First-launch model download
 
-Launch the app. You should see **"Model not found on this device"** with
-the expected path and a Recheck button. This is the fail-closed gate —
-the app refuses to run inference without a local bundle.
+Launch the app. The startup gate offers a one-time in-app download of both
+bundles (~432 MB total, Wi-Fi recommended), with progress, resume on retry,
+sha-256 verification and unpacking. After it finishes the app enters the
+feed. Manual adb push (below) still works if you prefer it.
 
-## 3. Push both model bundles
+## 3. (Optional) Push both model bundles manually
 
 ```bash
 # One-time downloads (~400 MB Qwen + ~150 MB whisper-base)
