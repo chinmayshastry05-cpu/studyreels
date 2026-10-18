@@ -66,8 +66,9 @@ class BackgroundTranscriber implements Transcriber {
 /// and parakeet returns no timestamp segments. Language is left to the model
 /// default (auto-detect), which handles Hindi/English/mixed lectures.
 ///
-/// 100% LOCAL: transcription responses always carry cloud_handoff == false;
-/// a missing or true value fails closed.
+/// 100% LOCAL: the engine emits cloud_handoff == false when no cloud key
+/// is configured (no key is ever set; without one no handoff can happen),
+/// and a missing or true value fails closed.
 class TranscriptionException implements Exception {
   final String message;
   const TranscriptionException(this.message);
