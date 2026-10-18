@@ -15,47 +15,91 @@ void main() {
   runApp(const StudyReelsApp());
 }
 
-ThemeData _buildTheme(Brightness brightness) {
-  const seed = Color(0xFF7C5CFF);
+ThemeData buildAppTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
-  final bg = dark ? const Color(0xFF0B0A12) : const Color(0xFFF6F4FF);
-  final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-  final base = ThemeData(useMaterial3: true, colorScheme: scheme);
+  final scheme = dark
+      ? const ColorScheme.dark(
+          primary: AppColors.gold,
+          onPrimary: Colors.black,
+          secondary: AppColors.goldBright,
+          onSecondary: Colors.black,
+          surface: AppColors.darkSurface,
+          onSurface: Color(0xFFF7F7F5),
+          surfaceContainerHighest: Color(0xFF1F1F24),
+          onSurfaceVariant: Color(0xFFA6A6AD),
+          error: Color(0xFFFF6B6B),
+          outline: Color(0xFF2A2A30),
+        )
+      : const ColorScheme.light(
+          primary: AppColors.goldDeep,
+          onPrimary: Colors.white,
+          secondary: AppColors.gold,
+          onSecondary: Colors.black,
+          surface: Colors.white,
+          onSurface: Color(0xFF191914),
+          surfaceContainerHighest: Color(0xFFF1EEE6),
+          onSurfaceVariant: Color(0xFF6B6759),
+          error: Color(0xFFD32F2F),
+          outline: Color(0xFFE4E0D5),
+        );
+  final base = ThemeData(
+      useMaterial3: true, colorScheme: scheme, fontFamily: 'Inter');
   return base.copyWith(
-    scaffoldBackgroundColor: bg,
-    textTheme: base.textTheme.apply(
-        bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+    scaffoldBackgroundColor:
+        dark ? Colors.black : const Color(0xFFFBFAF6),
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
-          fontSize: 24,
+          fontSize: 26,
           fontWeight: FontWeight.w800,
-          letterSpacing: 0.3,
+          letterSpacing: -0.4,
           color: scheme.onSurface),
     ),
     cardTheme: CardThemeData(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
     ),
     listTileTheme: ListTileThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: dark ? AppColors.darkCard : scheme.surfaceContainerHighest,
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+    ),
+    progressIndicatorTheme:
+        const ProgressIndicatorThemeData(color: AppColors.gold),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: scheme.surface.withValues(alpha: 0.85),
-      indicatorColor: seed.withValues(alpha: 0.3),
-      height: 68,
+      backgroundColor: dark ? const Color(0xFF0B0B0D) : scheme.surface,
+      indicatorColor: AppColors.gold.withValues(alpha: 0.22),
+      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? AppColors.gold
+              : scheme.onSurfaceVariant)),
       labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      height: 68,
     ),
   );
 }
@@ -72,8 +116,8 @@ class StudyReelsApp extends StatelessWidget {
       valueListenable: themeMode,
       builder: (_, mode, __) => MaterialApp(
         title: 'StudyReels',
-        theme: _buildTheme(Brightness.light),
-        darkTheme: _buildTheme(Brightness.dark),
+        theme: buildAppTheme(Brightness.light),
+        darkTheme: buildAppTheme(Brightness.dark),
         themeMode: mode,
         home: const StartupGate(),
       ),
@@ -81,8 +125,8 @@ class StudyReelsApp extends StatelessWidget {
   }
 }
 
-/// Checks for the on-device LLM bundle before entering the app, then loads
-/// the persisted library and provides it to the feed/library/import screens.
+/// Checks onboarding, then the on-device model bundles, before entering the
+/// app; loads the persisted library for the feed/library/import screens.
 class StartupGate extends StatefulWidget {
   const StartupGate({super.key});
 
@@ -174,14 +218,15 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    void goImport() => setState(() => _index = 2);
     final screens = <Widget>[
-      const FeedScreen(),
-      const LibraryScreen(),
+      FeedScreen(onImportTap: goImport),
+      LibraryScreen(onImportTap: goImport),
       ImportScreen(onDone: () => setState(() => _index = 0)),
     ];
     return Scaffold(
       extendBody: false,
-      body: AuroraBackground(
+      body: AmbientBackground(
         child: Theme(
           data: Theme.of(context)
               .copyWith(scaffoldBackgroundColor: Colors.transparent),

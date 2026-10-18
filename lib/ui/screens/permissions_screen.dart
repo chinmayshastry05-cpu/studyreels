@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/services/system_bridge.dart';
-
-const _green = Color(0xFF39FF14);
+import '../widgets/fx.dart';
 
 /// First-launch onboarding: asks for everything the app needs up front
 /// (notifications for download progress, video access for importing
@@ -78,60 +77,86 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     widget.onDone();
   }
 
-  Widget _line(bool ok, String name, String why) {
+  Widget _row(bool ok, IconData icon, String name, String why) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text.rich(TextSpan(children: [
-        TextSpan(
-            text: ok ? '[ OK ] ' : '[ -- ] ',
-            style: TextStyle(color: ok ? _green : Colors.amber)),
-        TextSpan(text: '$name\n', style: const TextStyle(color: _green)),
-        TextSpan(
-            text: '       $why',
-            style: const TextStyle(color: Colors.white54)),
-      ])),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        GoldIconBadge(icon, size: 44),
+        const SizedBox(width: 14),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SizedBox(height: 2),
+            Text(name,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(why,
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+          ]),
+        ),
+        const SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Icon(
+            ok ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 22,
+            color: ok ? AppColors.gold : cs.onSurfaceVariant,
+          ),
+        ),
+      ]),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final allOk = _permsOk && _batteryOk;
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: DefaultTextStyle(
-            style: const TextStyle(
-                fontFamily: 'monospace', fontSize: 13, color: _green),
-            child: ListView(
+      body: AmbientBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('studyreels@device:~\$ ./setup --permissions',
-                    style: TextStyle(color: _green)),
-                const SizedBox(height: 16),
-                const Text('Requesting everything up front, once.',
-                    style: TextStyle(color: Colors.white70)),
-                const SizedBox(height: 16),
-                _line(_permsOk, 'notifications + video access',
-                    'download progress alerts; import lecture videos'),
-                _line(_batteryOk, 'battery optimization exemption',
-                    'keeps the model download running in background'),
-                const SizedBox(height: 12),
-                const Text('Everything runs on-device. Internet is used only '
-                    'for the one-time model download.',
-                    style: TextStyle(color: Colors.white54)),
-                const SizedBox(height: 24),
-                if (!(_permsOk && _batteryOk))
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: _green, foregroundColor: Colors.black),
-                    onPressed: _busy ? null : _grantAll,
-                    child: const Text('GRANT ALL'),
-                  ),
+                const SizedBox(height: 28),
+                const GoldIconBadge(Icons.school_outlined, size: 72),
+                const SizedBox(height: 20),
+                Text('Welcome to StudyReels',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                        color: cs.onSurface)),
                 const SizedBox(height: 8),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(foregroundColor: _green),
+                Text('A couple of one-time permissions,\nthen everything runs on-device.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 14, height: 1.5, color: cs.onSurfaceVariant)),
+                const SizedBox(height: 28),
+                _row(_permsOk, Icons.video_library_outlined,
+                    'Notifications & video access',
+                    'Download progress alerts; import lecture videos'),
+                _row(_batteryOk, Icons.battery_saver_outlined,
+                    'Battery optimization exemption',
+                    'Keeps the model download alive in the background'),
+                const Spacer(),
+                if (!allOk)
+                  GoldButton(
+                    label: _busy ? 'Asking…' : 'Grant all',
+                    icon: Icons.check_circle_outline,
+                    onPressed: _busy ? null : _grantAll,
+                  ),
+                const SizedBox(height: 10),
+                TextButton(
                   onPressed: _busy ? null : _continue,
-                  child: Text(_permsOk && _batteryOk ? 'CONTINUE' : 'SKIP FOR NOW'),
+                  child: Text(allOk ? 'Continue' : 'Skip for now',
+                      style: const TextStyle(
+                          color: AppColors.gold,
+                          fontWeight: FontWeight.w700)),
                 ),
               ],
             ),

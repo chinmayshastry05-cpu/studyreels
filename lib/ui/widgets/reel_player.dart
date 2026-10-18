@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import '../../data/models/reel.dart';
 import '../../data/models/transcript.dart';
 import '../../data/services/reel_exporter.dart';
+import 'fx.dart';
 
 /// Plays the ORIGINAL video file, looping the reel's [start, end] range —
 /// reels are never re-rendered clips. Shows transcript captions as an
@@ -174,9 +175,20 @@ class _ReelPlayerState extends State<ReelPlayer> {
             ),
           ),
           if (!_controller.value.isPlaying)
-            const Center(
-              child: Icon(Icons.play_arrow,
-                  size: 72, color: Colors.white70),
+            Center(
+              child: Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: AppColors.gold.withValues(alpha: 0.6),
+                      width: 1.5),
+                ),
+                child: const Icon(Icons.play_arrow_rounded,
+                    size: 44, color: AppColors.gold),
+              ),
             ),
           // One-tap save to gallery.
           Positioned(
@@ -188,69 +200,90 @@ class _ReelPlayerState extends State<ReelPlayer> {
                     child: SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.gold),
                     ),
                   )
-                : IconButton(
-                    icon: const Icon(Icons.download,
-                        color: Colors.white),
-                    tooltip: 'Save reel to gallery',
-                    onPressed: _save,
+                : Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: AppColors.gold.withValues(alpha: 0.4)),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.download,
+                          color: AppColors.gold),
+                      tooltip: 'Save reel to gallery',
+                      onPressed: _save,
+                    ),
                   ),
           ),
           // Caption overlay.
           if (caption != null && caption.isNotEmpty)
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: 120,
+              left: 20,
+              right: 20,
+              bottom: 128,
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.black.withValues(alpha: 0.68),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   caption,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      height: 1.35),
                 ),
               ),
             ),
-          // Title / chapter overlay.
+          // Bottom scrim + title / chapter overlay.
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 190,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Color(0xE6000000)],
+                ),
+              ),
+            ),
+          ),
           Positioned(
             left: 16,
             right: 16,
-            bottom: 32,
+            bottom: 28,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: widget.reel.isProblem
-                        ? Colors.orange
-                        : Colors.blue,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    widget.reel.isProblem ? 'PROBLEM' : 'TOPIC',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
+                AppChip(
+                  widget.reel.isProblem ? 'PROBLEM' : 'TOPIC',
+                  filled: !widget.reel.isProblem,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
                   widget.reel.title,
                   style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   widget.reel.chapter,
-                  style: const TextStyle(color: Colors.white70),
+                  style: const TextStyle(
+                      color: AppColors.gold,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
                 ),
               ],
             ),

@@ -1,7 +1,7 @@
 name: studyreels
 description: Fully local study app — lecture videos split into topic/problem reels by a tiny on-device LLM.
 publish_to: "none"
-version: 0.1.5+5
+version: 0.2.0+6
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -25,6 +25,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
   assets:
     - assets/prompts/
     - assets/samples/

@@ -40,6 +40,32 @@ class SegmentationService {
         .replaceAll('{{TRANSCRIPT}}', transcriptChunk);
   }
 
+  /// Names a lecture from its opening transcript lines: a short chapter
+  /// title (2-6 words). Used so the user never types a chapter name.
+  Future<String> nameLecture(String transcriptHead) async {
+    const instruction = 'Read this lecture excerpt and give the lecture a '
+        'short chapter title (2 to 6 words). Output ONLY the title: no '
+        'quotes, no trailing punctuation, no explanation.\n\nExcerpt:\n';
+    final head = transcriptHead.length > 1200
+        ? transcriptHead.substring(0, 1200)
+        : transcriptHead;
+    final raw = await llm.generate(instruction + head, maxTokens: 24);
+    final name = sanitizeChapterName(raw);
+    if (name.isEmpty) {
+      throw const SegmentationException('Model returned an empty title');
+    }
+    return name;
+  }
+
+  /// Cleans model output down to a one-line plain title. Pure - unit-tested.
+  static String sanitizeChapterName(String raw) {
+    var s = raw.split('\n').first.trim();
+    s = s.replaceAll(RegExp(r'^[^A-Za-z0-9]+|[^A-Za-z0-9)]+\$'), '');
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (s.length > 60) s = s.substring(0, 60).trim();
+    return s;
+  }
+
   /// Runs the LLM and returns validated segments, retrying on validation
   /// failure with a repair prompt.
   Future<List<Segment>> segment(

@@ -1,6 +1,7 @@
 import '../models/chapter.dart';
 import '../models/reel.dart';
 import '../models/segment.dart';
+import '../models/transcript.dart';
 import 'library_store.dart';
 import 'llm_service.dart';
 import 'segmentation_service.dart';
@@ -43,6 +44,31 @@ List<Segment> dedupeSegments(List<Segment> segments) {
   return kept;
 }
 
+/// Picks the chapter name for a lecture without asking the user: the LLM
+/// titles it from the opening transcript lines; on any failure the first
+/// topic title is used, then a neutral name. Pure orchestration.
+Future<String> resolveChapterName({
+  required List<Segment> segments,
+  required List<TranscriptSegment> transcript,
+  Future<String> Function(String transcriptHead)? nameChapter,
+  required void Function(String stage) onProgress,
+}) async {
+  if (nameChapter != null) {
+    try {
+      onProgress('Naming the chapter…');
+      final head = transcript.take(12).map((t) => t.text).join(' ');
+      final name = await nameChapter(head);
+      if (name.isNotEmpty) return name;
+    } catch (_) {
+      // Fall through to the title-based fallback.
+    }
+  }
+  for (final s in segments) {
+    if (s.type == SegmentType.topic) return s.title;
+  }
+  return segments.isNotEmpty ? segments.first.title : 'Imported lecture';
+}
+
 /// Pure orchestration: transcript -> chunks -> LLM segments -> reels.
 /// All native/IO dependencies are injected; unit-tested with fakes.
 Future<List<Reel>> buildReels({
@@ -50,7 +76,8 @@ Future<List<Reel>> buildReels({
   required SegmentationService segmentation,
   required int Function(String text) countTokens,
   required String videoPath,
-  required String chapterName,
+  String? chapterName,
+  Future<String> Function(String transcriptHead)? nameChapter,
   required void Function(String stage) onProgress,
 }) async {
   onProgress('Transcribing audio…');
@@ -75,6 +102,13 @@ Future<List<Reel>> buildReels({
   // Chunks overlap: the same topic/problem near a boundary may be
   // segmented twice. Dedupe before building reels.
   final segments = dedupeSegments(allSegments);
+  final chapter = chapterName ??
+      await resolveChapterName(
+        segments: segments,
+        transcript: transcript,
+        nameChapter: nameChapter,
+        onProgress: onProgress,
+      );
   final reels = <Reel>[];
   for (var i = 0; i < segments.length; i++) {
     final segment = segments[i];
@@ -82,7 +116,7 @@ Future<List<Reel>> buildReels({
       id: '${DateTime.now().millisecondsSinceEpoch}-$i-${segment.startSec}',
       videoPath: videoPath,
       segment: segment,
-      chapter: chapterName,
+      chapter: chapter,
       captions: transcript
           .where(
               (t) => t.start < segment.endSec && t.end > segment.startSec)
@@ -113,7 +147,6 @@ class ReelPipeline {
 
   Future<Chapter> run({
     required String videoPath,
-    required String chapterName,
     required void Function(String stage) onProgress,
   }) async {
     final llm = CactusLlmBackend();
@@ -132,12 +165,12 @@ class ReelPipeline {
         segmentation: segmentation,
         countTokens: llm.countTokens,
         videoPath: videoPath,
-        chapterName: chapterName,
+        nameChapter: segmentation.nameLecture,
         onProgress: onProgress,
       );
       onProgress('Saving to library…');
       await library.addReels(reels);
-      return Chapter(name: chapterName, reels: reels);
+      return Chapter(name: reels.first.chapter, reels: reels);
     } finally {
       await llm.dispose();
     }

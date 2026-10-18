@@ -16,12 +16,12 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
-    expect(find.textContaining('Models not found'), findsOneWidget);
-    expect(find.text(path), findsOneWidget);
+    expect(find.textContaining('One-time setup'), findsOneWidget);
     expect(find.textContaining('Download models'), findsOneWidget);
 
-    await tester.tap(find.text('Recheck'));
+    await tester.tap(find.text('I already have the models'));
     expect(rechecked, isTrue);
   });
 }
