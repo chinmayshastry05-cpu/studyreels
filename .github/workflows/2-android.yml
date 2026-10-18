@@ -1,0 +1,539 @@
+name: Android
+
+on:
+  push:
+    branches: [master]
+    # Version tags (e.g. v0.2.2-debug) run the full pipeline: the build
+    # job, both emulator jobs, and the release job (release APK artifact).
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.47.7"
+  NDK_VERSION: "27.0.12077973"
+  ANDROID_API: "34"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout (with Cactus submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # NOTE: android-actions/setup-android@v3 was removed — it fails on the
+      # current runner image ("Failed to find package 'tools'"). The runner
+      # already ships the Android SDK ($ANDROID_HOME) with cmdline-tools,
+      # so install what we need directly with sdkmanager.
+      - name: Install NDK + platform + build-tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API }}" \
+            "build-tools;34.0.0" \
+            "ndk;${{ env.NDK_VERSION }}"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Unhide cactus_* C API symbols for Dart FFI
+        # Upstream cactus_flags adds -Wl,--exclude-libs,ALL on Android, which
+        # hides every cactus_* symbol from libcactus_engine.so (JNI consumers
+        # do not care; Dart FFI lookups fail: "undefined symbol: cactus_init").
+        run: |
+          grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt \
+            || { echo 'upstream exclude-libs flag not found - check cactus pin'; exit 1; }
+          sed -i '/-Wl,--exclude-libs,ALL/d' third_party/cactus/cactus-kernels/CMakeLists.txt
+          ! grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt
+
+      - name: Build libcactus_engine.so (arm64-v8a)
+        run: |
+          bash third_party/cactus/android/build.sh
+          ls -la third_party/cactus/android/libcactus_engine.so
+
+
+      - name: Verify Dart FFI symbols are exported
+        run: |
+          for sym in cactus_init cactus_complete cactus_transcribe cactus_destroy; do
+            nm -D --defined-only third_party/cactus/android/libcactus_engine.so | grep -q " T $sym" \
+              || { echo "MISSING SYMBOL: $sym in libcactus_engine.so"; exit 1; }
+          done
+          echo "FFI symbols OK"
+
+      - name: Stage native lib into jniLibs
+        run: |
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp third_party/cactus/android/libcactus_engine.so \
+             android/app/src/main/jniLibs/arm64-v8a/
+          ls -la android/app/src/main/jniLibs/arm64-v8a/
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: flutter analyze
+        run: flutter analyze
+
+      - name: flutter test
+        run: flutter test
+
+      - name: Build debug APK (arm64)
+        run: flutter build apk --debug --target-platform android-arm64
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: studyreels-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+
+  # On-device integration tests on an x86_64 emulator (free runner).
+  # The APK is arm64-only; the google_apis x86_64 image runs it via the
+  # emulator's ARM binary translation. If install fails with
+  # INSTALL_FAILED_NO_MATCHING_ABIS, this job needs an x86_64 engine build.
+  #
+  # What this job PROVES: app launches, the model-missing gate works, the
+  # native audio-extraction path yields a valid WAV, the reel-export path
+  # writes a MediaStore clip — on a real Android runtime.
+  #
+  # What it CANNOT prove: Cactus/Qwen inference speed or quality (no model
+  # bundle is installed on the emulator), real Snapdragon 7 Gen 1
+  # performance, or the OS gallery-picker UI (a separate activity, not
+  # drivable from flutter_test).
+  integration:
+    runs-on: ubuntu-latest
+    # Fail fast: the whole job (emulator boot + test APK build + 3 tests)
+    # fits comfortably in 25 min when healthy; longer means something hung.
+    timeout-minutes: 25
+    # The emulator gate is informational: it must never block the build or
+    # the release. Real-device proof comes from the F55.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout (with Cactus submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install NDK + platform + build-tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API }}" \
+            "build-tools;34.0.0" \
+            "ndk;${{ env.NDK_VERSION }}"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # No Cactus engine build here: the integration APK targets x86_64
+      # (the emulator's ABI) and the engine .so is arm64-only, so it would
+      # not be packaged anyway. The integration tests never load it.
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      # Documented prerequisite for hardware-accelerated emulators on Linux
+      # runners (reactivecircus/android-emulator-runner README): without
+      # this, the action disables KVM and the API-34 emulator cannot boot
+      # within the timeout.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # CI ONLY: `flutter test integration_test` drives tests through the
+      # Dart VM service, which binds a localhost socket - and Android
+      # requires the INTERNET permission for any socket bind, even
+      # localhost. Run 31 proved it: "Could not start Dart VM service HTTP
+      # server: SocketException: Failed to create server socket (OS Error:
+      # Operation not permitted)". The product ships WITHOUT the INTERNET
+      # permission (locked decision); this file is generated here, never
+      # committed, and the build job (which makes the release APK) never
+      # creates it.
+      - name: Allow INTERNET for the test harness only
+        run: |
+          mkdir -p android/app/src/debug
+          cat > android/app/src/debug/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <!-- CI ONLY: lets the Dart VM service bind localhost for
+                   `flutter test integration_test`. Never committed, never
+                   in releases. -->
+              <uses-permission android:name="android.permission.INTERNET"/>
+          </manifest>
+          EOF
+          cat android/app/src/debug/AndroidManifest.xml
+
+      - name: Run integration tests on emulator
+        # Fail fast at the step level too: boot (~1 min) + APK build
+        # (~5 min) + 3 tests (~1 min) when healthy.
+        timeout-minutes: 15
+        # Gradle project property -> build.gradle.kts `targetAbi`: build the
+        # integration APK for the emulator's x86_64 ABI. The arm64-only
+        # APK hangs the x86_64 package installer (run 37909947967).
+        env:
+          ORG_GRADLE_PROJECT_targetAbi: x86_64
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          # The action auto-disables KVM on some Linux runners, which makes
+          # boot impossibly slow (boot timeout). Force hardware acceleration;
+          # if /dev/kvm is truly absent the emulator fails fast with a clear
+          # error instead of a 10-minute timeout.
+          disable-linux-hw-accel: false
+          # NOTE: one command per line, NO backslash continuations — the
+          # action runs each line as a separate `sh -c`, so a trailing `\`
+          # becomes a literal argument and breaks `flutter test`.
+          # /data/local/tmp is the adb-writable scratch dir (pushing to
+          # /sdcard fails with EPERM on API 34, run 37900585709); the app
+          # can read it back for MediaExtractor/video_player.
+          #
+          # Run 30: install OK, then "Waiting for VM Service port to be
+          # available..." until the step timeout - the app never printed
+          # "VM Service is listening". The background loop prints a
+          # filtered logcat tail + pidof to the JOB LOG every 60s (a killed
+          # step never reaches a failure handler, but these lines are
+          # already in the log): crash (AndroidRuntime) vs hang (pid alive,
+          # no VM service) is visible immediately. `logcat -d` dumps
+          # without clearing, so flutter's own streaming log reader is
+          # unaffected.
+          script: |
+            adb push integration_test/fixtures/test_video.mp4 /data/local/tmp/test_video.mp4
+            (while [ ! -f "$GITHUB_WORKSPACE/STOP_LOGCAT" ]; do echo "=== logcat @ $(date -u +%H:%M:%S) UTC ==="; adb logcat -d -s 'flutter:V' 'AndroidRuntime:E' 'DEBUG:V' '*:F' 2>/dev/null | tail -150; echo "=== pidof com.studyreels.app: $(adb shell pidof com.studyreels.app 2>/dev/null || echo none) ==="; adb logcat -d > "$GITHUB_WORKSPACE/logcat-snap-$(date +%s).txt" 2>/dev/null || break; sleep 60; done) &
+            flutter test integration_test --reporter expanded -v --dart-define=TEST_VIDEO_PATH=/data/local/tmp/test_video.mp4; EC=$?; touch "$GITHUB_WORKSPACE/STOP_LOGCAT"; adb logcat -d > "$GITHUB_WORKSPACE/logcat-final.txt" 2>/dev/null; exit $EC
+
+      - name: Upload logcat snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-logcat
+          path: logcat*.txt
+          if-no-files-found: ignore
+
+  # E2E with REAL model bundles on an x86_64 emulator (free runner).
+  # The APK targets the emulator's x86_64 ABI and packages the x86_64
+  # engine .so (see below). Inference is still slow — the test's per-test
+  # timeouts are 20/30/60 min (see integration_test/e2e_import_test.dart)
+  # and the job timeout is 120 min.
+  #
+  # What this job PROVES: engine init + whisper transcription + Qwen
+  # segmentation + library write on a real Android runtime, with the real
+  # 4K-context engine, end to end. The engine-level proof already passed
+  # under QEMU (Qwen init, short generation, long-context recall,
+  # whisper init); this is the app-level proof.
+  #
+  # ABI note (run 39111114168): an arm64-only APK does NOT work here.
+  # The x86_64 emulator's package manager extracts only device-ABI
+  # (x86_64) libs, so the arm64 engine .so was never extracted and FFI
+  # dlopen failed with "libcactus_engine.so not found" — ARM translation
+  # never applies to native .so loading. The e2e APK must carry the
+  # x86_64 engine .so (built via SIMDe in the cactus fork). The release
+  # APK stays arm64-only (see release job).
+  #
+  # Model bundles: the app's own Hugging Face mirrors (identical bytes to
+  # the models-v1 GitHub release assets, verified by sha-256 below).
+  # Lecture clip: Mike Matas TED talk (CC BY-NC-ND 3.0), 4:35, real
+  # English speech — test input only, never shipped in the product.
+  #
+  # Screenshots, two ways (run 39121408297 proved the old way cannot
+  # work): the test harness UNINSTALLS the app after the run
+  # (logcat: deletePackageX / PACKAGE_FULLY_REMOVED), so a bare relaunch
+  # fails with "Activity class does not exist". The job now (1) polls
+  # screencap every 30s while the test runs (screenshot-mid.png — the
+  # app under the harness, real app UI), and (2) reinstalls the debug
+  # APK (`adb install -r`) before the `am start -W` relaunch, whose
+  # output is captured (relaunch.log) with a resumed-activity check
+  # (resumed.log, one retry) and a logcat dump (logcat.txt).
+  e2e_real_models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout (with Cactus submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install NDK + platform + build-tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API }}" \
+            "build-tools;34.0.0" \
+            "ndk;${{ env.NDK_VERSION }}"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Unhide cactus_* C API symbols for Dart FFI
+        # Upstream cactus_flags adds -Wl,--exclude-libs,ALL on Android, which
+        # hides every cactus_* symbol from libcactus_engine.so (JNI consumers
+        # do not care; Dart FFI lookups fail: "undefined symbol: cactus_init").
+        run: |
+          grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt \
+            || { echo 'upstream exclude-libs flag not found - check cactus pin'; exit 1; }
+          sed -i '/-Wl,--exclude-libs,ALL/d' third_party/cactus/cactus-kernels/CMakeLists.txt
+          ! grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt
+
+      - name: Build libcactus_engine.so (arm64-v8a)
+        run: |
+          bash third_party/cactus/android/build.sh
+          ls -la third_party/cactus/android/libcactus_engine.so
+
+      - name: Verify Dart FFI symbols are exported
+        run: |
+          for sym in cactus_init cactus_complete cactus_transcribe cactus_destroy; do
+            nm -D --defined-only third_party/cactus/android/libcactus_engine.so | grep -q " T $sym" \
+              || { echo "MISSING SYMBOL: $sym in libcactus_engine.so"; exit 1; }
+          done
+          echo "FFI symbols OK"
+
+      - name: Stage native lib into jniLibs (both ABIs)
+        # The e2e APK targets x86_64 (below), so it packages the x86_64
+        # engine .so. The arm64 .so is staged too (harmless: abiFilters
+        # drops it for this build) so the same staging covers a future
+        # dual-ABI e2e APK. The release job stages arm64 only — the
+        # shipped release APK stays arm64-only.
+        run: |
+          test -f third_party/cactus/android/x86_64/libcactus_engine.so \
+            || { echo 'x86_64 engine .so missing - check cactus pin'; exit 1; }
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a android/app/src/main/jniLibs/x86_64
+          cp third_party/cactus/android/libcactus_engine.so \
+             android/app/src/main/jniLibs/arm64-v8a/
+          cp third_party/cactus/android/x86_64/libcactus_engine.so \
+             android/app/src/main/jniLibs/x86_64/
+          ls -la android/app/src/main/jniLibs/arm64-v8a/ android/app/src/main/jniLibs/x86_64/
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      # Documented prerequisite for hardware-accelerated emulators on Linux
+      # runners (reactivecircus/android-emulator-runner README): without
+      # this, the action disables KVM and the API-34 emulator cannot boot
+      # within the timeout.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # CI ONLY: `flutter test integration_test` drives tests through the
+      # Dart VM service, which binds a localhost socket - and Android
+      # requires the INTERNET permission for any socket bind, even
+      # localhost. The product ships WITHOUT the INTERNET permission
+      # (locked decision); this file is generated here, never committed,
+      # and the release job (which makes the release APK) never creates it.
+      - name: Allow INTERNET for the test harness only
+        run: |
+          mkdir -p android/app/src/debug
+          cat > android/app/src/debug/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <!-- CI ONLY: lets the Dart VM service bind localhost for
+                   `flutter test integration_test`. Never committed, never
+                   in releases. -->
+              <uses-permission android:name="android.permission.INTERNET"/>
+          </manifest>
+          EOF
+          cat android/app/src/debug/AndroidManifest.xml
+
+      - name: Install ffmpeg (clip trim needs it; not on the runner image)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -1
+
+      - name: Run E2E with real models on emulator
+        # Fail fast at the step level too: boot + downloads + pushes +
+        # APK build + 3 E2E tests when healthy.
+        timeout-minutes: 110
+        # Gradle project property -> build.gradle.kts `targetAbi`: build the
+        # E2E APK for the emulator's x86_64 ABI, so the package manager
+        # extracts the x86_64 engine .so (an arm64-only APK can never load
+        # it on an x86_64 device — run 39111114168).
+        env:
+          ORG_GRADLE_PROJECT_targetAbi: x86_64
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          # The action auto-disables KVM on some Linux runners, which makes
+          # boot impossibly slow (boot timeout). Force hardware acceleration;
+          # if /dev/kvm is truly absent the emulator fails fast with a clear
+          # error instead of a 10-minute timeout.
+          disable-linux-hw-accel: false
+          # NOTE: one command per line, NO backslash continuations — the
+          # action runs each line as a separate `sh -c`, so a trailing `\`
+          # becomes a literal argument and breaks the command.
+          # /data/local/tmp is the adb-writable scratch dir (pushing to
+          # /sdcard fails with EPERM on API 34, run 37900585709).
+          script: |
+            curl -sSL --retry 3 -o qwen3-0.6b-int4.zip https://huggingface.co/Cactus-Compute/Qwen3-0.6B/resolve/main/weights/qwen3-0.6b-int4.zip
+            echo "2f4f5e3b91fc62168e66a592d09cfd1792a0b96e1994d46b5de77ddebbf94427  qwen3-0.6b-int4.zip" | sha256sum -c -
+            curl -sSL --retry 3 -o whisper-base-int4.zip https://huggingface.co/Cactus-Compute/whisper-base/resolve/main/weights/whisper-base-int4.zip
+            echo "3c3cd19ad9499a31ebc3a9c7833d718bb841d48e871e57db4024d7666aa8bbe7  whisper-base-int4.zip" | sha256sum -c -
+            mkdir -p models/qwen3-0.6b-int4 models/whisper-base
+            unzip -q -o qwen3-0.6b-int4.zip -d models/qwen3-0.6b-int4
+            unzip -q -o whisper-base-int4.zip -d models/whisper-base
+            if [ ! -f models/qwen3-0.6b-int4/config.txt ]; then D=$(ls -d models/qwen3-0.6b-int4/*/ | head -1); mv "$D"* models/qwen3-0.6b-int4/; rmdir "$D"; fi
+            if [ ! -f models/whisper-base/config.txt ]; then D=$(ls -d models/whisper-base/*/ | head -1); mv "$D"* models/whisper-base/; rmdir "$D"; fi
+            test -f models/qwen3-0.6b-int4/config.txt
+            test -f models/whisper-base/config.txt
+            adb push models /data/local/tmp/models
+            adb shell chmod -R a+rX /data/local/tmp/models
+            # Test clip: 45s of clean single-speaker English narration,
+            # trimmed from the Mike Matas TED talk (CC BY-NC-ND 3.0, CI
+            # test input only, never shipped). Window 60-105s: verified
+            # speech-like (crest factor ~11 dB, RMS -27 dB, natural
+            # 0.5-2s pauses), NOT the opening applause (crest ~7 dB,
+            # RMS -17 dB) and NOT the 161-268s region whose debug-3
+            # transcript was punctuation noise. If SIMDe whisper gives
+            # noise on this clean clip, that is a whisper-build finding,
+            # not a clip problem.
+            curl -sSL --retry 3 -o e2e_lecture_full.mp4 https://archive.org/download/MikeMatas_2011/MikeMatas_2011.mp4
+            ffmpeg -ss 60 -t 45 -i e2e_lecture_full.mp4 -c copy e2e_lecture.mp4
+            adb push e2e_lecture.mp4 /data/local/tmp/e2e_lecture.mp4
+            flutter test integration_test/e2e_import_test.dart --reporter expanded > e2e-test.log 2>&1 & TESTPID=$!; while kill -0 $TESTPID 2>/dev/null; do sleep 30; adb exec-out screencap -p > screenshot-mid-tmp.png && mv screenshot-mid-tmp.png screenshot-mid.png; done; wait $TESTPID; EC=$?; cat e2e-test.log; ls build/app/outputs/flutter-apk/ > reinstall.log 2>&1; adb install -r build/app/outputs/flutter-apk/app-debug.apk >> reinstall.log 2>&1; cat reinstall.log; adb shell am start -W -n com.studyreels.app/.MainActivity > relaunch.log 2>&1; cat relaunch.log; sleep 8; adb shell dumpsys activity activities | grep mResumedActivity > resumed.log 2>&1; cat resumed.log; if ! grep -q "com.studyreels.app" resumed.log; then echo "APP NOT FOREGROUND - retrying launch"; adb shell am start -W -n com.studyreels.app/.MainActivity >> relaunch.log 2>&1; sleep 5; fi; adb exec-out screencap -p > screenshot.png; adb logcat -d > logcat.txt 2>&1; exit $EC
+
+      - name: Upload screenshot + test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshot-log
+          path: |
+            screenshot.png
+            screenshot-mid.png
+            e2e-test.log
+            relaunch.log
+            resumed.log
+            reinstall.log
+            logcat.txt
+          if-no-files-found: warn
+
+  # Release APK, built only on version tags (e.g. v0.2.2-debug).
+  # Same engine .so + jniLibs staging as the build job; NO debug
+  # INTERNET manifest (the product ships without it).
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout (with Cactus submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install NDK + platform + build-tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API }}" \
+            "build-tools;34.0.0" \
+            "ndk;${{ env.NDK_VERSION }}"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Unhide cactus_* C API symbols for Dart FFI
+        run: |
+          grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt \
+            || { echo 'upstream exclude-libs flag not found - check cactus pin'; exit 1; }
+          sed -i '/-Wl,--exclude-libs,ALL/d' third_party/cactus/cactus-kernels/CMakeLists.txt
+          ! grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt
+
+      - name: Build libcactus_engine.so (arm64-v8a)
+        run: |
+          bash third_party/cactus/android/build.sh
+          ls -la third_party/cactus/android/libcactus_engine.so
+
+      - name: Verify Dart FFI symbols are exported
+        run: |
+          for sym in cactus_init cactus_complete cactus_transcribe cactus_destroy; do
+            nm -D --defined-only third_party/cactus/android/libcactus_engine.so | grep -q " T $sym" \
+              || { echo "MISSING SYMBOL: $sym in libcactus_engine.so"; exit 1; }
+          done
+          echo "FFI symbols OK"
+
+      - name: Stage native lib into jniLibs
+        run: |
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp third_party/cactus/android/libcactus_engine.so \
+             android/app/src/main/jniLibs/arm64-v8a/
+          ls -la android/app/src/main/jniLibs/arm64-v8a/
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Build release APK (arm64)
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: studyreels-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+
+
+
