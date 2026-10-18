@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -36,6 +38,21 @@ class _ImportScreenState extends State<ImportScreen> {
   bool _running = false;
   String _stage = '';
   String? _error;
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Tests and odd devices have no plugin channel: leave the footer
+    // hidden rather than crash the screen.
+    PackageInfo.fromPlatform().then((info) {
+      if (!mounted) return;
+      setState(() {
+        _version = 'v${info.version} (${info.buildNumber})'
+            '${kDebugMode ? ' debug' : ''}';
+      });
+    }).catchError((_) {});
+  }
 
   Future<Chapter> _defaultRunner({
     required String videoPath,
@@ -178,50 +195,12 @@ class _ImportScreenState extends State<ImportScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          Text('HOW IT WORKS',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
-                  color: cs.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          _step(1, 'Audio is lifted from the video'),
-          _step(2, 'Whisper transcribes it, on your phone'),
-          _step(3, 'AI names the chapter and finds topics & problems'),
-          _step(4, 'Reels are cut at those timestamps'),
-          _step(5, 'Filed into your library, ready to scroll'),
-          const SizedBox(height: 8),
-          Text('100% on-device - no internet, no uploads.',
-              style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
+          if (_version.isNotEmpty)
+            Text(_version,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
         ],
       ),
-    );
-  }
-
-  Widget _step(int n, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: AppColors.gold.withValues(alpha: 0.14),
-            shape: BoxShape.circle,
-            border:
-                Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
-          ),
-          child: Center(
-            child: Text('$n',
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.gold)),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
-      ]),
     );
   }
 
