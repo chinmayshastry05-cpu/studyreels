@@ -108,9 +108,9 @@ git clone --recurse-submodules https://github.com/chinmayshastry05-cpu/studyreel
 cd studyreels
 
 # 2. Build the engine for Android (needs NDK r26+)
-cactus build --android
-# → copy android/libcactus_engine.so to
-#   studyreels/android/app/src/main/jniLibs/arm64-v8a/
+bash third_party/cactus/android/build.sh
+# → copy third_party/cactus/android/libcactus.so to
+#   studyreels/android/app/src/main/jniLibs/arm64-v8a/libcactus_engine.so
 
 # 3. Model bundles download themselves on first launch (in-app, resumable).
 #    Manual dev-machine path still works:
@@ -225,14 +225,21 @@ still phase-1 work).
 - `flutter test` — all tests pass (segmentation schema/boundary rules,
   retry logic, local-only policy asserts, model round-trips).
 - Cactus Flutter binding integration steps verified against the Cactus repo
-  README/docs (`bindings/flutter`): copy `cactus.dart`, add `ffi` to
-  pubspec, `cactus build --android`, `.so` into `jniLibs/arm64-v8a/`.
+  (v1.14: `flutter/cactus.dart`): add `ffi` to pubspec,
+  `android/build.sh`, `.so` into `jniLibs/arm64-v8a/` as
+  `libcactus_engine.so`.
 - `cactus download` / `cactus convert` / `--lora` / `--bits` flags verified
   against Cactus CLI docs.
 - `Cactus-Compute/Qwen3-0.6B` bundle listing verified on Hugging Face
   (`weights/qwen3-0.6b-int4.zip`, `weights/qwen3-0.6b-int8.zip`).
 - Cactus license terms verified from the repo LICENSE file.
-- Cactus submodule pinned at commit `2cfcdb8` (v2.2.2, shallow clone).
+- Cactus submodule points at the StudyReels fork
+  `chinmayshastry05-cpu/cactus`, branch `studyreels-v1.14` (upstream
+  **v1.14** + Android FFI packaging shims). v2.x loads only transpiled
+  component bundles (`components/manifest.json`); the Cactus-Compute
+  weights zips this app downloads are the v1.x flat format (`config.txt`
+  + `*.weights`), so the engine must be v1.x — v2.2.2 made every
+  `cactus_init` return null on-device (fixed in v0.2.1).
 
 **Proven vs untested:**
 

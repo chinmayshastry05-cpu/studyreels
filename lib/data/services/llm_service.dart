@@ -33,6 +33,14 @@ abstract class LlmBackend {
   Future<void> dispose();
 }
 
+/// Engine-side detail for the last FFI failure, when the native lib set one.
+String lastCactusError() {
+  final ptr = cactus.cactusGetLastError();
+  if (ptr == nullptr) return 'no engine detail';
+  final msg = ptr.toDartString();
+  return msg.isEmpty ? 'no engine detail' : msg;
+}
+
 /// Production backend: Cactus engine via Dart FFI.
 ///
 /// 100% LOCAL POLICY (locked):
@@ -97,7 +105,8 @@ class CactusLlmBackend implements LlmBackend {
     try {
       _model = cactus.cactusInit(pathPtr.cast(), nullptr, false);
       if (_model == nullptr) {
-        throw const LlmException('cactus_init returned null model handle');
+        throw LlmException(
+            'cactus_init returned null model handle (${lastCactusError()})');
       }
       _ready = true;
     } finally {

@@ -34,13 +34,27 @@ void main() {
       }
     });
 
-    test('isModelPresent is true when the dir is non-empty', () async {
+    test('isModelPresent is false without config.txt (broken install)',
+        () async {
       final tmp =
           await Directory.systemTemp.createTemp('studyreels_test_');
       try {
         final dir = await Directory(ModelStore.expectedModelPath(tmp.path))
             .create(recursive: true);
         await File('${dir.path}/weights.bin').writeAsString('x');
+        expect(await ModelStore.isModelPresent(tmp.path), isFalse);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('isModelPresent is true when config.txt exists', () async {
+      final tmp =
+          await Directory.systemTemp.createTemp('studyreels_test_');
+      try {
+        final dir = await Directory(ModelStore.expectedModelPath(tmp.path))
+            .create(recursive: true);
+        await File('${dir.path}/config.txt').writeAsString('x');
         expect(await ModelStore.isModelPresent(tmp.path), isTrue);
       } finally {
         await tmp.delete(recursive: true);

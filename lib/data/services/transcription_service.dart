@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../../cactus/cactus.dart' as cactus;
 import '../models/transcript.dart';
 import 'audio_extractor.dart';
+import 'llm_service.dart' show lastCactusError;
 import 'transcriber.dart';
 
 /// Transcribes in a background isolate so the UI thread never blocks —
@@ -105,8 +106,9 @@ class TranscriptionService implements Transcriber {
     try {
       model = cactus.cactusInit(modelPathPtr.cast(), nullptr, false);
       if (model == nullptr) {
-        throw const TranscriptionException(
-            'cactus_init returned null for the whisper model');
+        throw TranscriptionException(
+            'cactus_init returned null for the whisper model '
+            '(${lastCactusError()})');
       }
       final wavPtr = wavPath.toNativeUtf8();
       final optionsPtr = '{"timestamps":true}'.toNativeUtf8();

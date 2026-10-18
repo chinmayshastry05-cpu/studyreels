@@ -108,11 +108,11 @@ class ModelDownloader {
 
   String _destPath(ModelBundle b) => '$appFilesDir/models/${b.destDirName}';
 
-  /// True when the extracted bundle dir exists and is non-empty.
+  /// True when the extracted bundle dir holds a loadable bundle
+  /// (config.txt present). A non-empty dir without it is a broken install
+  /// and gets downloaded again.
   Future<bool> isInstalled(ModelBundle b) async {
-    final dir = Directory(_destPath(b));
-    if (!await dir.exists()) return false;
-    return (await dir.list().toList()).isNotEmpty;
+    return File('${_destPath(b)}/config.txt').exists();
   }
 
   /// Total bytes still to download across all bundles (for the UI total).
