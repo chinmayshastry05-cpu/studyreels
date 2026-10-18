@@ -10,7 +10,6 @@ import 'package:studyreels/data/models/segment.dart';
 import 'package:studyreels/data/models/transcript.dart';
 import 'package:studyreels/data/services/library_store.dart';
 import 'package:studyreels/main.dart';
-import 'package:studyreels/ui/screens/import_screen.dart';
 import 'package:studyreels/ui/screens/model_missing_screen.dart';
 import 'package:studyreels/ui/screens/permissions_screen.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -50,8 +49,6 @@ class FakeVideoPlatform extends VideoPlayerPlatform {
   @override
   Future<Duration> getPosition(int textureId) async => Duration.zero;
   @override
-  Future<bool> isMuted(int textureId) async => false;
-  @override
   Future<void> setMixWithOthers(bool mixWithOthers) async {}
 }
 
@@ -69,7 +66,7 @@ LibraryStore fakeLibrary() {
             startSec: s,
             endSec: e),
         captions: [
-          TranscriptSegment(
+          const TranscriptSegment(
               start: 0,
               end: 12,
               text: 'So torque is the rotational equivalent of force.'),
@@ -163,13 +160,18 @@ void main() {
   }, skip: inCI);
 
   testWidgets('library', (tester) async {
-    await snap(
-        tester,
-        'library',
-        ChangeNotifierProvider.value(
-          value: fakeLibrary(),
-          child: const HomeShell(),
-        ));
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(Brightness.dark),
+      home: ChangeNotifierProvider.value(
+        value: fakeLibrary(),
+        child: const HomeShell(),
+      ),
+    ));
+    await tester.pump();
     await tester.tap(find.text('Library'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -181,13 +183,12 @@ void main() {
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
-    final never = Completer();
     await tester.pumpWidget(MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(Brightness.dark),
       home: ChangeNotifierProvider.value(
         value: fakeLibrary(),
-        child: HomeShell(),
+        child: const HomeShell(),
       ),
     ));
     await tester.pump();
@@ -212,14 +213,18 @@ void main() {
   }, skip: inCI);
 
   testWidgets('library light theme', (tester) async {
-    await snap(
-        tester,
-        'library_light',
-        ChangeNotifierProvider.value(
-          value: fakeLibrary(),
-          child: const HomeShell(),
-        ),
-        dark: false);
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(Brightness.light),
+      home: ChangeNotifierProvider.value(
+        value: fakeLibrary(),
+        child: const HomeShell(),
+      ),
+    ));
+    await tester.pump();
     await tester.tap(find.text('Library'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
