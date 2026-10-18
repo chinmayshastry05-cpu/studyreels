@@ -3,6 +3,7 @@ analyzer:
   exclude:
     - build/**
     - android/**
+    - third_party/**  # vendored engine sources are not app code to lint
 linter:
   rules:
     - avoid_print
