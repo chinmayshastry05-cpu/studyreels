@@ -53,6 +53,7 @@ ThemeData buildAppTheme(Brightness brightness) {
       scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 26,
           fontWeight: FontWeight.w800,
           letterSpacing: -0.4,
