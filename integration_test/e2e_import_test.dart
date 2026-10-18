@@ -20,16 +20,21 @@ import 'package:studyreels/data/services/transcription_service.dart';
 ///   unzip whisper-base-int4.zip -d /tmp/models/whisper-base
 ///   adb push /tmp/models /data/local/tmp/models
 ///   adb shell chmod -R a+rX /data/local/tmp/models
-///   adb push <a real 3-5 min lecture clip> /data/local/tmp/e2e_lecture.mp4
+///   adb push <a clean 30-60s speech clip> /data/local/tmp/e2e_lecture.mp4
 ///
 /// Run (engine .so staged in android/app/src/main/jniLibs/arm64-v8a first,
 /// same as the release flow):
 ///   ORG_GRADLE_PROJECT_targetAbi=arm64-v8a \
 ///   flutter test integration_test/e2e_import_test.dart --reporter expanded
 ///
-/// The clip must be real speech, 3-5 minutes: short enough to finish on an
-/// emulator, long enough that transcript chunks exceed the engine's old
-/// 512-token window so the raised context size is actually exercised.
+/// The clip is 30-60s of clean English narration (a trimmed window of the
+/// Mike Matas TED talk, CI trims it with ffmpeg): short enough to keep
+/// the emulator run fast, clean enough that transcript quality is a real
+/// signal. A long TED clip once passed with two comma-only segments and
+/// broke segmentation downstream, so the whisper test now also requires
+/// at least one segment with real words. The raised 4K context size is
+/// NOT exercised by this short clip; that proof lives in the QEMU
+/// engine tests (long-context recall), not here.
 ///
 /// `flutter test` needs INTERNET for its localhost VM-service socket; the
 /// product ships without it. Generate the throwaway debug manifest exactly
@@ -85,6 +90,16 @@ void main() {
       expect(transcript, isNotEmpty,
           reason: 'whisper returned no segments - wrong clip (needs real '
               'speech) or the whisper/vad bundle is broken');
+      // Transcript-quality gate: a clean-speech clip must yield real
+      // words, not just punctuation noise. (A long TED clip once passed
+      // isNotEmpty with two comma-only segments; that masked a useless
+      // transcript and broke the pipeline's segmentation downstream.)
+      expect(
+          transcript.any((t) => RegExp(r'[A-Za-z]').hasMatch(t.text)),
+          isTrue,
+          reason: 'whisper returned only punctuation/noise - no real words '
+              'in the transcript; check the clip (clean speech?) or the '
+              'whisper build');
     }, timeout: const Timeout(Duration(minutes: 30)));
 
     test('full pipeline: video in, reels in the library', () async {
