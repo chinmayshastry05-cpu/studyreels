@@ -50,10 +50,29 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - name: Unhide cactus_* C API symbols for Dart FFI
+        # Upstream cactus_flags adds -Wl,--exclude-libs,ALL on Android, which
+        # hides every cactus_* symbol from libcactus_engine.so (JNI consumers
+        # do not care; Dart FFI lookups fail: "undefined symbol: cactus_init").
+        run: |
+          grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt \
+            || { echo 'upstream exclude-libs flag not found - check cactus pin'; exit 1; }
+          sed -i '/-Wl,--exclude-libs,ALL/d' third_party/cactus/cactus-kernels/CMakeLists.txt
+          ! grep -q "exclude-libs,ALL" third_party/cactus/cactus-kernels/CMakeLists.txt
+
       - name: Build libcactus_engine.so (arm64-v8a)
         run: |
           bash third_party/cactus/android/build.sh
           ls -la third_party/cactus/android/libcactus_engine.so
+
+
+      - name: Verify Dart FFI symbols are exported
+        run: |
+          for sym in cactus_init cactus_complete cactus_transcribe cactus_destroy; do
+            nm -D --defined-only third_party/cactus/android/libcactus_engine.so | grep -q " T $sym" \
+              || { echo "MISSING SYMBOL: $sym in libcactus_engine.so"; exit 1; }
+          done
+          echo "FFI symbols OK"
 
       - name: Stage native lib into jniLibs
         run: |
