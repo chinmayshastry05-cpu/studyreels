@@ -26,14 +26,18 @@ class ImportScreen extends StatefulWidget {
   /// Injectable for tests/screenshots; defaults to the real pipeline.
   final PipelineRunner? runner;
 
-  const ImportScreen({super.key, required this.onDone, this.runner});
+  /// Injectable for tests; defaults to the real video import service.
+  final VideoImportService? importer;
+
+  const ImportScreen({super.key, required this.onDone, this.runner, this.importer});
 
   @override
   State<ImportScreen> createState() => _ImportScreenState();
 }
 
-class _ImportScreenState extends State<ImportScreen> {
-  final _importer = VideoImportService();
+class _ImportScreenState extends State<ImportScreen>
+    with WidgetsBindingObserver {
+  late final VideoImportService _importer;
   String? _videoPath;
   bool _running = false;
   String _stage = '';
@@ -43,6 +47,8 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   void initState() {
     super.initState();
+    _importer = widget.importer ?? VideoImportService();
+    WidgetsBinding.instance.addObserver(this);
     // Tests and odd devices have no plugin channel: leave the footer
     // hidden rather than crash the screen.
     PackageInfo.fromPlatform().then((info) {
@@ -52,6 +58,40 @@ class _ImportScreenState extends State<ImportScreen> {
             '${kDebugMode ? ' debug' : ''}';
       });
     }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning from the system picker: if Android destroyed the
+    // MainActivity while the picker was open, the picked file sits in
+    // the plugin cache and the original pick future never completes.
+    // Recover it so Done -> import starts, with no second tap.
+    if (state == AppLifecycleState.resumed) {
+      _recoverAfterResume();
+    }
+  }
+
+  /// One recovery attempt per resume, retried a few times: the plugin
+  /// writes its cache on a background executor, so the picked path may
+  /// land just after resume fires.
+  Future<void> _recoverAfterResume() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (!mounted || _running) return;
+      final path = await _importer.recoverLostVideo();
+      if (path != null) {
+        await _runPipeline(path);
+        return;
+      }
+      if (attempt < 2) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+    }
   }
 
   Future<Chapter> _defaultRunner({
@@ -77,8 +117,30 @@ class _ImportScreenState extends State<ImportScreen> {
   }
 
   Future<void> _pickAndRun() async {
+    // A pick lost to MainActivity destruction may already sit in the
+    // plugin cache (e.g. the user tapped Pick again after Done did
+    // nothing): use it without opening the picker a second time.
+    final recovered = await _importer.recoverLostVideo();
+    if (recovered != null) {
+      await _runPipeline(recovered);
+      return;
+    }
     final path = await _importer.pickLocalVideo();
-    if (!mounted || path == null) return;
+    if (!mounted) return;
+    if (path == null) {
+      // The pick future completed with nothing: the result may still
+      // have landed in the plugin cache after the pick returned.
+      final lost = await _importer.recoverLostVideo();
+      if (lost != null) {
+        await _runPipeline(lost);
+      }
+      return;
+    }
+    await _runPipeline(path);
+  }
+
+  Future<void> _runPipeline(String path) async {
+    if (!mounted || _running) return;
     setState(() {
       _videoPath = path;
       _error = null;
