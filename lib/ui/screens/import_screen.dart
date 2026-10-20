@@ -40,6 +40,7 @@ class _ImportScreenState extends State<ImportScreen>
   late final VideoImportService _importer;
   String? _videoPath;
   bool _running = false;
+  bool _picking = false;
   String _stage = '';
   String? _error;
   String _version = '';
@@ -117,26 +118,37 @@ class _ImportScreenState extends State<ImportScreen>
   }
 
   Future<void> _pickAndRun() async {
-    // A pick lost to MainActivity destruction may already sit in the
-    // plugin cache (e.g. the user tapped Pick again after Done did
-    // nothing): use it without opening the picker a second time.
-    final recovered = await _importer.recoverLostVideo();
-    if (recovered != null) {
-      await _runPipeline(recovered);
-      return;
-    }
-    final path = await _importer.pickLocalVideo();
-    if (!mounted) return;
-    if (path == null) {
-      // The pick future completed with nothing: the result may still
-      // have landed in the plugin cache after the pick returned.
-      final lost = await _importer.recoverLostVideo();
-      if (lost != null) {
-        await _runPipeline(lost);
+    // Guard re-entry (double-tap opens a second picker, which the plugin
+    // rejects) and never let a picker failure escape unhandled: surface
+    // it in the error card like a pipeline failure.
+    if (_picking || _running) return;
+    _picking = true;
+    try {
+      // A pick lost to MainActivity destruction may already sit in the
+      // plugin cache (e.g. the user tapped Pick again after Done did
+      // nothing): use it without opening the picker a second time.
+      final recovered = await _importer.recoverLostVideo();
+      if (recovered != null) {
+        await _runPipeline(recovered);
+        return;
       }
-      return;
+      final path = await _importer.pickLocalVideo();
+      if (!mounted) return;
+      if (path == null) {
+        // The pick future completed with nothing: the result may still
+        // have landed in the plugin cache after the pick returned.
+        final lost = await _importer.recoverLostVideo();
+        if (lost != null) {
+          await _runPipeline(lost);
+        }
+        return;
+      }
+      await _runPipeline(path);
+    } catch (_) {
+      _fail('The video picker could not be opened. Please try again.');
+    } finally {
+      _picking = false;
     }
-    await _runPipeline(path);
   }
 
   Future<void> _runPipeline(String path) async {

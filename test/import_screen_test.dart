@@ -30,11 +30,17 @@ import 'package:studyreels/ui/widgets/fx.dart';
 
 class _FakeImporter extends VideoImportService {
   String? pickResult;
+  bool throwOnPick = false;
   final List<String?> recoverResults = [];
   int recoverCalls = 0;
 
   @override
-  Future<String?> pickLocalVideo() async => pickResult;
+  Future<String?> pickLocalVideo() async {
+    if (throwOnPick) {
+      throw Exception('PlatformException(already_active)');
+    }
+    return pickResult;
+  }
 
   @override
   Future<String?> recoverLostVideo() async {
@@ -159,6 +165,26 @@ void main() {
     expect(ranPaths, isEmpty);
     expect(done, isFalse);
     expect(find.text('Pick a lecture video'), findsOneWidget);
+  });
+
+  testWidgets('picker throwing shows the error card, not a crash',
+      (tester) async {
+    final importer = _FakeImporter()..throwOnPick = true;
+    final ranPaths = <String>[];
+    await tester.pumpWidget(_screen(
+      importer: importer,
+      onDone: () {},
+      ranPaths: ranPaths,
+    ));
+    await tester.pump();
+
+    await tester.tap(find.byType(GlowCard).first);
+    await tester.pumpAndSettle();
+
+    expect(ranPaths, isEmpty);
+    expect(find.text('Import failed'), findsOneWidget);
+    expect(find.textContaining('video picker could not be opened'),
+        findsOneWidget);
   });
 }
 

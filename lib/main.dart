@@ -172,6 +172,34 @@ class _StartupGateState extends State<StartupGate> {
     return FutureBuilder<_Startup>(
       future: _startup,
       builder: (context, snap) {
+        if (snap.hasError) {
+          // Startup itself failed (storage/plugins unavailable): offer a
+          // retry instead of spinning forever.
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 40),
+                    const SizedBox(height: 12),
+                    const Text('StudyReels could not start.',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text('${snap.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12)),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                        onPressed: _retry, child: const Text('Retry')),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
